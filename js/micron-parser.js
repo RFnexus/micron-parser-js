@@ -250,6 +250,8 @@ class MicronParser {
                     // if the line is  just "-", do a normal <hr>
                     if (line.length === 1) {
                         const hr = document.createElement("hr");
+                        hr.style.all = "revert";
+                        hr.style.color = "inherit";
                         this.applySectionIndent(hr, state);
                         return [hr];
                     } else {
