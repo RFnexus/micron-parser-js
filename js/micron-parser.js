@@ -264,7 +264,6 @@ class MicronParser {
                         div.style.width = "100%";
                         div.style.whiteSpace = "nowrap";
                         div.style.overflow = "hidden";
-                        div.style.margin = "0.5em 0";
                         this.applySectionIndent(div, state);
 
                         return [div];
