@@ -251,7 +251,9 @@ class MicronParser {
                     if (line.length === 1) {
                         const hr = document.createElement("hr");
                         hr.style.all = "revert";
-                        hr.style.color = "inherit";
+                        hr.style.borderColor = this.colorToCss(state.fg_color);
+                        hr.style.margin = "0.5em 0.5em 0.5em 0.5em";
+                        hr.style.boxShadow = "0 0 0 0.5em " + this.colorToCss(state.bg_color);
                         this.applySectionIndent(hr, state);
                         return [hr];
                     } else {
@@ -262,10 +264,11 @@ class MicronParser {
                         const div = document.createElement("div");
                         div.style.whiteSpace = "pre";   // needs to not wrap and ignore container formatting
                         div.textContent = repeated;
-                        div.style.display = "inline-block";
                         div.style.width = "100%";
                         div.style.whiteSpace = "nowrap";
                         div.style.overflow = "hidden";
+                        div.style.color = this.colorToCss(state.fg_color);
+                        div.style.backgroundColor = this.colorToCss(state.bg_color);
                         this.applySectionIndent(div, state);
 
                         return [div];
