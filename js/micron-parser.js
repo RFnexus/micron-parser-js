@@ -882,9 +882,9 @@ applyStyleToElement(el, style) {
 
     splitAtSpaces(line) {
         let out = "";
-        let wordArr = line.split(" ");
+        let wordArr = line.split(/(?<= )/g);
         for (let i = 0; i < wordArr.length; i++) {
-            out += "<span class='Mu-mws'>" + this.forceMonospace(wordArr[i] + " ") + "</span>";
+            out += "<span class='Mu-mws'>" + this.forceMonospace(wordArr[i]) + "</span>";
         }
         return out;
     }
