@@ -29,8 +29,6 @@ class MicronParser {
             console.warn('DOMPurify is not installed. Include it above micron-parser.js or run npm install dompurify');
         }
 
-        this.SELECTED_STYLES = null;
-
         this.STYLES_DARK = {
             "plain": {fg: this.DEFAULT_FG_DARK, bg: this.DEFAULT_BG, bold: false, underline: false, italic: false},
             "heading1": {fg: "222", bg: "bbb", bold: false, underline: false, italic: false},
@@ -45,11 +43,7 @@ class MicronParser {
             "heading3": {fg: "222", bg: "ccc", bold: false, underline: false, italic: false}
         };
 
-        if (this.darkTheme) {
-            this.SELECTED_STYLES = this.STYLES_DARK;
-        } else {
-            this.SELECTED_STYLES = this.STYLES_LIGHT;
-        }
+        this.SELECTED_STYLES = this.darkTheme ? this.STYLES_DARK : this.STYLES_LIGHT;
 
     }
 
@@ -84,14 +78,57 @@ class MicronParser {
         return `nomadnetwork://${url}`;
     }
 
+
+    parseHeaderTags(markup) {
+        let pageFg = null;
+        let pageBg = null;
+
+        const lines = markup.split("\n");
+
+        for (let line of lines) {
+            const trimmedLine = line.trim();
+
+            if (trimmedLine.length === 0) {
+                continue;
+            }
+
+            if (!trimmedLine.startsWith("#!")) {
+                break;
+            }
+
+            if (trimmedLine.startsWith("#!fg=")) {
+                let color = trimmedLine.substring(5).trim();
+                if (color.length === 3 || color.length === 6) {
+                    pageFg = color;
+                }
+            }
+
+            if (trimmedLine.startsWith("#!bg=")) {
+                let color = trimmedLine.substring(5).trim();
+                if (color.length === 3 || color.length === 6) {
+                    pageBg = color;
+                }
+            }
+        }
+
+        return { fg: pageFg, bg: pageBg };
+    }
+
     convertMicronToHtml(markup) {
         let html = "";
+
+        // parse header tags for page-level color defaults
+        const headerColors = this.parseHeaderTags(markup);
+
+        const plainStyle = this.SELECTED_STYLES?.plain || {fg: this.DEFAULT_FG_DARK, bg: this.DEFAULT_BG};
+        const defaultFg = headerColors.fg || plainStyle.fg;
+        const defaultBg = headerColors.bg || this.DEFAULT_BG;
 
         let state = {
             literal: false,
             depth: 0,
-            fg_color: this.SELECTED_STYLES.plain.fg,
-            bg_color: this.DEFAULT_BG,
+            fg_color: defaultFg,
+            bg_color: defaultBg,
             formatting: {
                 bold: false,
                 underline: false,
@@ -100,6 +137,8 @@ class MicronParser {
             },
             default_align: "left",
             align: "left",
+            default_fg: defaultFg,
+            default_bg: defaultBg,
             radio_groups: {}
         };
 
@@ -131,11 +170,17 @@ class MicronParser {
         // Create a fragment to hold all the Micron output
         const fragment = document.createDocumentFragment();
 
+        const headerColors = this.parseHeaderTags(markup);
+
+        const plainStyle = this.SELECTED_STYLES?.plain || {fg: this.DEFAULT_FG_DARK, bg: this.DEFAULT_BG};
+        const defaultFg = headerColors.fg || plainStyle.fg;
+        const defaultBg = headerColors.bg || this.DEFAULT_BG;
+
         let state = {
             literal: false,
             depth: 0,
-            fg_color: this.SELECTED_STYLES.plain.fg,
-            bg_color: this.DEFAULT_BG,
+            fg_color: defaultFg,
+            bg_color: defaultBg,
             formatting: {
                 bold: false,
                 underline: false,
@@ -144,6 +189,8 @@ class MicronParser {
             },
             default_align: "left",
             align: "left",
+            default_fg: defaultFg,
+            default_bg: defaultBg,
             radio_groups: {}
         };
 
@@ -177,7 +224,7 @@ class MicronParser {
 
 
             if (!state.literal) {
-                // Comments
+                // Comments, and header tags s
                 if (line[0] === "#") {
                     return [];
                 }
@@ -201,10 +248,11 @@ class MicronParser {
                         // apply heading style if it exists
                         let style = null;
                         let wanted_style = "heading" + i;
-                        if (this.SELECTED_STYLES[wanted_style]) {
+                        const defaultPlain = {fg: this.darkTheme ? this.DEFAULT_FG_DARK : this.DEFAULT_FG_LIGHT, bg: this.DEFAULT_BG, bold: false, underline: false, italic: false};
+                        if (this.SELECTED_STYLES?.[wanted_style]) {
                             style = this.SELECTED_STYLES[wanted_style];
                         } else {
-                            style = this.SELECTED_STYLES.plain;
+                            style = this.SELECTED_STYLES?.plain || defaultPlain;
                         }
 
                         const latched_style = this.stateToStyle(state);
@@ -627,8 +675,8 @@ applyStyleToElement(el, style) {
                         }
                         break;
                     case 'f':
-                        // reset fg
-                        state.fg_color = this.SELECTED_STYLES.plain.fg;
+                        // reset fg to page default
+                        state.fg_color = state.default_fg;
                         break;
                     case 'B':
                         // next 3 chars => bg color
@@ -640,16 +688,16 @@ applyStyleToElement(el, style) {
                         }
                         break;
                      case 'b':
-                        // reset bg
-                        state.bg_color = this.DEFAULT_BG;
+                        // reset bg to page default
+                        state.bg_color = state.default_bg;
                         flushPart(); // flush to allow for ` tags on same line
                         break;
                     case '`':
                         state.formatting.bold = false;
                         state.formatting.underline = false;
                         state.formatting.italic = false;
-                        state.fg_color = this.SELECTED_STYLES.plain.fg;
-                        state.bg_color = this.DEFAULT_BG;
+                        state.fg_color = state.default_fg;
+                        state.bg_color = state.default_bg;
                         state.align = state.default_align;
                         mode = "text";
                         break;
@@ -710,8 +758,8 @@ applyStyleToElement(el, style) {
                         state.formatting.bold = false;
                         state.formatting.underline = false;
                         state.formatting.italic = false;
-                        state.fg_color = this.SELECTED_STYLES.plain.fg;
-                        state.bg_color = this.DEFAULT_BG;
+                        state.fg_color = state.default_fg;
+                        state.bg_color = state.default_bg;
                         state.align = state.default_align;
                         i += 2;
                         continue;
@@ -720,17 +768,6 @@ applyStyleToElement(el, style) {
                         mode = "formatting";
                         i++;
                         continue;
-                    }
-                } else if (c === '[') {
-                    flushPart();
-                    let linkDataText = this.parseLink(line, i, state);
-                    if (linkDataText) {
-                        output.push(linkDataText.obj);
-                        i += linkDataText.skip;
-                        continue;
-                    } else {
-                        // not a link
-                        part += '[';
                     }
                 } else {
                     // normal text char
@@ -882,12 +919,9 @@ applyStyleToElement(el, style) {
 
     splitAtSpaces(line) {
         let out = "";
-        let wordArr = line.split(" ");
+        let wordArr = line.split(/(?<= )/g);
         for (let i = 0; i < wordArr.length; i++) {
             out += "<span class='Mu-mws'>" + this.forceMonospace(wordArr[i]) + "</span>";
-            if (i < wordArr.length - 1) {
-                out += " ";
-            }
         }
         return out;
     }
