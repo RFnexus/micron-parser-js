@@ -342,7 +342,6 @@ class MicronParser {
                     outerDiv.style.backgroundColor = this.colorToCss(state.bg_color);
                     outerDiv.style.width = "100%";
                     outerDiv.style.display = "block";
-                    outerDiv.style.padding = "0 2px";
                     outerDiv.appendChild(container);
                     return [outerDiv];
                 }
@@ -429,7 +428,6 @@ class MicronParser {
             if (currentSpan) {
                 if (currentStyle && currentStyle.bg !== this.DEFAULT_BG) {
                     currentSpan.style.display = "inline-block";
-                    currentSpan.style.padding = "0 2px";
                 }
                 container.appendChild(currentSpan);
                 currentSpan = null;
@@ -575,7 +573,6 @@ applyStyleToElement(el, style) {
         }
         if (bgColor && bgColor !== "default") {
             el.style.backgroundColor = bgColor;
-            el.style.padding = "0 2px";
             el.style.display = "inline-block";
         }
 
