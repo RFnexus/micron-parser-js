@@ -160,6 +160,17 @@ class MicronParser {
             }
         }
 
+        // wrap in container with page-level colors
+        let containerStyle = "";
+        if (defaultFg && defaultFg !== "default") {
+            containerStyle += `color: ${this.colorToCss(defaultFg)};`;
+        }
+        if (defaultBg && defaultBg !== "default") {
+            containerStyle += `background-color: ${this.colorToCss(defaultBg)};`;
+        }
+        if (containerStyle) {
+            html = `<div style="${containerStyle}">${html}</div>`;
+        }
 
        try {
         return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
@@ -197,6 +208,15 @@ class MicronParser {
             radio_groups: {}
         };
 
+        // create container div for page-level colors
+        const container = document.createElement("div");
+        if (defaultFg && defaultFg !== "default") {
+            container.style.color = this.colorToCss(defaultFg);
+        }
+        if (defaultBg && defaultBg !== "default") {
+            container.style.backgroundColor = this.colorToCss(defaultBg);
+        }
+
         const lines = markup.split("\n");
 
         for (let line of lines) {
@@ -205,15 +225,16 @@ class MicronParser {
             if (lineOutput && lineOutput.length > 0) {
                 for (let el of lineOutput) {
 
-                    fragment.appendChild(el);
+                    container.appendChild(el);
                 }
             } else if (lineOutput && lineOutput.length === 0) {
                 // skip
             } else {
-                fragment.appendChild(document.createElement("br"));
+                container.appendChild(document.createElement("br"));
             }
         }
 
+        fragment.appendChild(container);
         return fragment;
     }
 
@@ -319,7 +340,9 @@ class MicronParser {
                         div.style.whiteSpace = "nowrap";
                         div.style.overflow = "hidden";
                         div.style.color = this.colorToCss(state.fg_color);
-                        div.style.backgroundColor = this.colorToCss(state.bg_color);
+                        if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
+                            div.style.backgroundColor = this.colorToCss(state.bg_color);
+                        }
                         this.applySectionIndent(div, state);
 
                         return [div];
@@ -452,7 +475,7 @@ class MicronParser {
                 if (!this.stylesEqual(styleSpec, currentStyle)) {
                     flushSpan();
                     currentSpan = document.createElement("span");
-                    this.applyStyleToElement(currentSpan, styleSpec);
+                    this.applyStyleToElement(currentSpan, styleSpec, state.default_bg);
                     currentStyle = styleSpec;
                 }
                 currentSpan.innerHTML += text;
@@ -467,7 +490,7 @@ class MicronParser {
                     if (p.width) {
                         input.size = p.width;
                     }
-                    this.applyStyleToElement(input, this.styleFromState(p.style));
+                    this.applyStyleToElement(input, this.styleFromState(p.style), state.default_bg);
                     container.appendChild(input);
                 } else if (p.type === "checkbox") {
                     let label = document.createElement("label");
@@ -478,7 +501,7 @@ class MicronParser {
                     if (p.prechecked) cb.setAttribute('checked', true);
                     label.appendChild(cb);
                     label.appendChild(document.createTextNode(" " + p.label));
-                    this.applyStyleToElement(label, this.styleFromState(p.style));
+                    this.applyStyleToElement(label, this.styleFromState(p.style), state.default_bg);
                     container.appendChild(label);
                 } else if (p.type === "radio") {
                     let label = document.createElement("label");
@@ -489,7 +512,7 @@ class MicronParser {
                     if (p.prechecked) rb.setAttribute('checked', true);
                     label.appendChild(rb);
                     label.appendChild(document.createTextNode(" " + p.label));
-                    this.applyStyleToElement(label, this.styleFromState(p.style));
+                    this.applyStyleToElement(label, this.styleFromState(p.style), state.default_bg);
                     container.appendChild(label);
                 } else if (p.type === "link") {
 
@@ -545,7 +568,7 @@ class MicronParser {
                     a.classList.add('Mu-nl');
                     a.setAttribute('data-action', "openNode");
                     a.innerHTML = p.label;
-                    this.applyStyleToElement(a, this.styleFromState(p.style));
+                    this.applyStyleToElement(a, this.styleFromState(p.style), state.default_bg);
                     container.appendChild(a);
                 }
 
@@ -567,7 +590,7 @@ class MicronParser {
         return stateStyle;
     }
 
-applyStyleToElement(el, style) {
+applyStyleToElement(el, style, defaultBg = "default") {
         if (!style) return;
         // convert style fg/bg to colors
         let fgColor = this.colorToCss(style.fg);
@@ -576,7 +599,7 @@ applyStyleToElement(el, style) {
         if (fgColor && fgColor !== "default") {
             el.style.color = fgColor;
         }
-        if (bgColor && bgColor !== "default") {
+        if (bgColor && bgColor !== "default" && style.bg !== defaultBg) {
             el.style.backgroundColor = bgColor;
             el.style.padding = "0 2px";
             el.style.display = "inline-block";
