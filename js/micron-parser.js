@@ -75,6 +75,9 @@ class MicronParser {
     }
 
     static formatNomadnetworkUrl(url) {
+        if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) {
+            return url;
+        }
         return `nomadnetwork://${url}`;
     }
 
@@ -337,7 +340,7 @@ class MicronParser {
                 this.appendOutput(container, outputParts, state);
 
                 // if theres a background color, wrap with outer div
-                if (state.bg_color !== this.DEFAULT_BG) {
+                if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
                     const outerDiv = document.createElement("div");
                     outerDiv.style.backgroundColor = this.colorToCss(state.bg_color);
                     outerDiv.style.width = "100%";
@@ -350,7 +353,7 @@ class MicronParser {
             } else {
                 // empty line but maintain background color if set
                 const br = document.createElement("br");
-                if (state.bg_color !== this.DEFAULT_BG) {
+                if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
                     const outerDiv = document.createElement("div");
                     outerDiv.style.backgroundColor = this.colorToCss(state.bg_color);
                     outerDiv.style.width = "100%";
@@ -369,7 +372,7 @@ class MicronParser {
         } else {
             // Empty line handling for just newline background color
             const br = document.createElement("br");
-            if (state.bg_color !== this.DEFAULT_BG) {
+            if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
                 const outerDiv = document.createElement("div");
                 outerDiv.style.backgroundColor = this.colorToCss(state.bg_color);
                 outerDiv.style.width = "100%";
@@ -427,7 +430,7 @@ class MicronParser {
 
          const flushSpan = () => {
             if (currentSpan) {
-                if (currentStyle && currentStyle.bg !== this.DEFAULT_BG) {
+                if (currentStyle && currentStyle.bg !== state.default_bg && currentStyle.bg !== "default") {
                     currentSpan.style.display = "inline-block";
                     currentSpan.style.padding = "0 2px";
                 }
