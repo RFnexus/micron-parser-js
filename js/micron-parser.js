@@ -601,7 +601,6 @@ applyStyleToElement(el, style, defaultBg = "default") {
         }
         if (bgColor && bgColor !== "default" && style.bg !== defaultBg) {
             el.style.backgroundColor = bgColor;
-            el.style.padding = "0 2px";
             el.style.display = "inline-block";
         }
 
