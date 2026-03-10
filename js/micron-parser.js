@@ -688,10 +688,17 @@ applyStyleToElement(el, style, defaultBg = "default") {
                     case '*':
                         state.formatting.italic = !state.formatting.italic;
                         break;
-
                     case 'F':
+                        if (line[i+1] == "T" && line.length >= i + 8) { // truecolor tags (`FTxxxxxx)
+                            
+                            let color = line.substr(i + 2, 6);
+                            state.fg_color = color;
+                            skip = 7;
+                            break;
+                        }
                         // next 3 chars => fg color
                         if (line.length >= i + 4) {
+
                             let color = line.substr(i + 1, 3);
                             state.fg_color = color;
                             skip = 3;
@@ -702,6 +709,13 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         state.fg_color = state.default_fg;
                         break;
                     case 'B':
+                        if (line[i+1] == "T" && line.length >= i + 8) { // truecolor tags (`FTxxxxxx)
+                            let color = line.substr(i + 2, 6);
+                            state.bg_color = color;
+                            skip = 7;
+                            flushPart(); // flush current part when background color changes
+                            break;
+                        }
                         // next 3 chars => bg color
                         if (line.length >= i + 4) {
                             let color = line.substr(i + 1, 3);
@@ -710,7 +724,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
                             flushPart(); // flush current part when background color changes
                         }
                         break;
-                     case 'b':
+                    case 'b':
                         // reset bg to page default
                         state.bg_color = state.default_bg;
                         flushPart(); // flush to allow for ` tags on same line
