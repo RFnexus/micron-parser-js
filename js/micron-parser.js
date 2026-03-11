@@ -689,7 +689,14 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         state.formatting.italic = !state.formatting.italic;
                         break;
                     case 'F':
-                        if (line[i+1] == "T" && line.length >= i + 8) { // truecolor tags (`FTxxxxxx)
+                        if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) { // fallback truecolor for NomadNet, `FTabcdef -> `Fbdf`Face  
+                            let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
+                            state.fg_color = color;
+                            skip = 8;
+                            break;
+                        }  
+
+                        if (line[i+1] == "T" && line.length >= i + 8) { // "this page doesnt work on nomadnet" truecolor tag (`FTxxxxxx)
                             
                             let color = line.substr(i + 2, 6);
                             state.fg_color = color;
@@ -709,7 +716,14 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         state.fg_color = state.default_fg;
                         break;
                     case 'B':
-                        if (line[i+1] == "T" && line.length >= i + 8) { // truecolor tags (`FTxxxxxx)
+                        if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) { // fallback truecolor for NomadNet, `FTabcdef -> `Fbdf`Face  
+                            let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
+                            state.bg_color = color;
+                            skip = 8;
+                            flushPart(); // flush current part when background color changes
+                            break;
+                        }  
+                        if (line[i+1] == "T" && line.length >= i + 8) { // "this page doesnt work on nomadnet" truecolor tag (`BTxxxxxx)
                             let color = line.substr(i + 2, 6);
                             state.bg_color = color;
                             skip = 7;
