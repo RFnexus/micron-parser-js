@@ -694,15 +694,18 @@ applyStyleToElement(el, style, defaultBg = "default") {
                             state.fg_color = color;
                             skip = 8;
                             break;
-                        }  
-
-                        if (line[i+1] == "T" && line.length >= i + 8) { // "this page doesnt work on nomadnet" truecolor tag (`FTxxxxxx)
-                            
+                        }
+                  
+                        /*
+                        // Until NomadNet supports the `FTaaaaaa truecolor Micron tag, please do not uncomment.
+                        if (line[i+1] == "T" && line.length >= i + 8) {
                             let color = line.substr(i + 2, 6);
                             state.fg_color = color;
                             skip = 7;
                             break;
                         }
+                        */
+                  
                         // next 3 chars => fg color
                         if (line.length >= i + 4) {
 
@@ -723,6 +726,9 @@ applyStyleToElement(el, style, defaultBg = "default") {
                             flushPart(); // flush current part when background color changes
                             break;
                         }  
+                        
+                        /*
+                        // Until NomadNet supports the `BTaaaaaa truecolor Micron tag, please do not uncomment.
                         if (line[i+1] == "T" && line.length >= i + 8) { // "this page doesnt work on nomadnet" truecolor tag (`BTxxxxxx)
                             let color = line.substr(i + 2, 6);
                             state.bg_color = color;
@@ -730,6 +736,8 @@ applyStyleToElement(el, style, defaultBg = "default") {
                             flushPart(); // flush current part when background color changes
                             break;
                         }
+                        */
+                  
                         // next 3 chars => bg color
                         if (line.length >= i + 4) {
                             let color = line.substr(i + 1, 3);
