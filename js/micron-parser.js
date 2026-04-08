@@ -689,22 +689,23 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         state.formatting.italic = !state.formatting.italic;
                         break;
                     case 'F':
-                        if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) { // fallback truecolor for NomadNet, `FTabcdef -> `Fbdf`Face  
+                       /* 
+                       if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) { // fallback truecolor for NomadNet, `FTabcdef -> `Fbdf`Face  
                             let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
                             state.fg_color = color;
                             skip = 8;
                             break;
                         }
-                  
-                        /*
-                        // Until NomadNet supports the `FTaaaaaa truecolor Micron tag, please do not uncomment.
+                       */
+
+                        // New 0.9.9 truecolor `FT tag
                         if (line[i+1] == "T" && line.length >= i + 8) {
                             let color = line.substr(i + 2, 6);
                             state.fg_color = color;
                             skip = 7;
                             break;
                         }
-                        */
+                        
                   
                         // next 3 chars => fg color
                         if (line.length >= i + 4) {
@@ -719,6 +720,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         state.fg_color = state.default_fg;
                         break;
                     case 'B':
+                        /*
                         if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) { // fallback truecolor for NomadNet, `FTabcdef -> `Fbdf`Face  
                             let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
                             state.bg_color = color;
@@ -726,17 +728,17 @@ applyStyleToElement(el, style, defaultBg = "default") {
                             flushPart(); // flush current part when background color changes
                             break;
                         }  
+                        */
                         
-                        /*
-                        // Until NomadNet supports the `BTaaaaaa truecolor Micron tag, please do not uncomment.
-                        if (line[i+1] == "T" && line.length >= i + 8) { // "this page doesnt work on nomadnet" truecolor tag (`BTxxxxxx)
+                        // New 0.9.9 truecolor `BT tag
+                        if (line[i+1] == "T" && line.length >= i + 8) { 
                             let color = line.substr(i + 2, 6);
                             state.bg_color = color;
                             skip = 7;
                             flushPart(); // flush current part when background color changes
                             break;
                         }
-                        */
+                        
                   
                         // next 3 chars => bg color
                         if (line.length >= i + 4) {
