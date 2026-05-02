@@ -1,7 +1,7 @@
 Micron Parser JS
 -
 This repository provides a JavaScript parser for Micron, a lightweight, terminal-friendly markdown format used
-in  [NomadNet](https://github.com/markqvist/NomadNet) and [MeshChat](https://github.com/liamcottle/reticulum-meshchat)
+in  [NomadNet](https://github.com/markqvist/NomadNet) and [MeshChatX](https://meshchatx.com/)
 
 ## Requirements
 
@@ -35,6 +35,25 @@ document.getElementById('yourElement').innerHTML = htmlOutput;
 const domFragment = parser.convertMicronToFragment(micronMarkup);
 // and append it to the DOM
 document.body.appendChild(domFragment);
+```
+
+## Partials
+
+Micron-parser-js supports embedded partials The syntax is `` `{url`refresh`fields} `` where `refresh` is the seconds between reloads (must be `>= 1`) and `fields` is a `|`-separated list. A `pid=<id>` field gives the partial a stable identity for tracking across refreshes.
+
+The parser emits a placeholder `<div class="Mu-partial">⧖</div>` with all the parsed metadata as `data-*` attributes. Wire it up with  `MicronParser.bindPartials(root, fetcher, options?)` in your application logic:
+
+```js
+const root = document.getElementById('output');
+root.innerHTML = parser.convertMicronToHtml(micronMarkup);
+
+const cleanup = MicronParser.bindPartials(root, async ({ destination, fields, id, signal }) => {
+    const res = await fetch(`/proxy?path=${encodeURIComponent(destination)}`, { signal });
+    return await res.text(); // returned as innerHTML; may also return a Node or { markup: string }
+});
+
+// when the view is torn down:
+cleanup();
 ```
 
 ## Best practices

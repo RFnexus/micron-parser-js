@@ -240,27 +240,30 @@ class MicronParser {
 
     parseLine(line, state) {
         if (line.length > 0) {
-            // Check literals toggle
             if (line === "`=") {
                 state.literal = !state.literal;
-                return null;
+                return [];
             }
 
+            let preEscape = false;
 
             if (!state.literal) {
-                // Comments, and header tags s
-                if (line[0] === "#") {
+                if (line[0] === ">" && line.includes("`<")) {
+                    line = line.replace(/^>+/, "");
+                }
+
+                if (line[0] === "\\") {
+                    line = line.slice(1);
+                    preEscape = true;
+                } else if (line[0] === "#") {
                     return [];
-                }
-
-                // Reset section depth
-                if (line[0] === "<") {
+                } else if (line.startsWith("`{")) {
+                    return this.parsePartial(line.slice(2)) || [];
+                } else if (line[0] === "<") {
                     state.depth = 0;
+                    if (line.length === 1) return [];
                     return this.parseLine(line.slice(1), state);
-                }
-
-                // Section headings
-                if (line[0] === ">") {
+                } else if (line[0] === ">") {
                     let i = 0;
                     while (i < line.length && line[i] === ">") {
                         i++;
@@ -269,14 +272,12 @@ class MicronParser {
                     let headingLine = line.slice(i);
 
                     if (headingLine.length > 0) {
-                        // apply heading style if it exists
-                        let style = null;
-                        let wanted_style = "heading" + i;
                         const defaultPlain = {fg: this.darkTheme ? this.DEFAULT_FG_DARK : this.DEFAULT_FG_LIGHT, bg: this.DEFAULT_BG, bold: false, underline: false, italic: false};
-                        if (this.SELECTED_STYLES?.[wanted_style]) {
-                            style = this.SELECTED_STYLES[wanted_style];
-                        } else {
-                            style = this.SELECTED_STYLES?.plain || defaultPlain;
+                        let style = this.SELECTED_STYLES?.plain || defaultPlain;
+                        for (let d = 1; d <= i; d++) {
+                            if (this.SELECTED_STYLES?.[`heading${d}`]) {
+                                style = this.SELECTED_STYLES[`heading${d}`];
+                            }
                         }
 
                         const latched_style = this.stateToStyle(state);
@@ -285,41 +286,24 @@ class MicronParser {
                         let outputParts = this.makeOutput(state, headingLine);
                         this.styleToState(latched_style, state);
 
-                        // make outputParts full container width
                         if (outputParts && outputParts.length > 0) {
                             const outerDiv = document.createElement("div");
-                            outerDiv.style.display = "inline-block";
-                            outerDiv.style.width = "100%";
                             this.applyStyleToElement(outerDiv, style);
+                            outerDiv.style.display = "block";
+                            outerDiv.style.width = "100%";
 
                             const innerDiv = document.createElement("div");
                             this.applySectionIndent(innerDiv, state);
+                            this.applyAlignment(innerDiv, state);
 
                             this.appendOutput(innerDiv, outputParts, state);
                             outerDiv.appendChild(innerDiv);
 
-                            const br = document.createElement("br");
-                            return [outerDiv, br]
+                            return [outerDiv];
                         }
-                        // wrap in a heading container
-                        if (outputParts && outputParts.length > 0) {
-                            const div = document.createElement("div");
-                            this.applyAlignment(div, state);
-                            this.applySectionIndent(div, state);
-                            // merge text nodes
-                            this.appendOutput(div, outputParts, state);
-                            return [div];
-                        } else {
-                            return null;
-                        }
-                    } else {
-                        return null;
                     }
-                }
-
-                // horizontal dividers
-                if (line[0] === "-") {
-                    // if the line is  just "-", do a normal <hr>
+                    return [];
+                } else if (line[0] === "-") {
                     if (line.length === 1) {
                         const hr = document.createElement("hr");
                         hr.style.all = "revert";
@@ -328,69 +312,52 @@ class MicronParser {
                         hr.style.boxShadow = "0 0 0 0.5em " + this.colorToCss(state.bg_color);
                         this.applySectionIndent(hr, state);
                         return [hr];
-                    } else {
-                        // if second char given
-                        const dividerChar = line[1];  // use the following character for creating the divider
-                        const repeated = dividerChar.repeat(250);
-
-                        const div = document.createElement("div");
-                        div.style.whiteSpace = "pre";   // needs to not wrap and ignore container formatting
-                        div.textContent = repeated;
-                        div.style.width = "100%";
-                        div.style.whiteSpace = "nowrap";
-                        div.style.overflow = "hidden";
-                        div.style.color = this.colorToCss(state.fg_color);
-                        if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
-                            div.style.backgroundColor = this.colorToCss(state.bg_color);
-                        }
-                        this.applySectionIndent(div, state);
-
-                        return [div];
                     }
-                }
 
+                    let dividerChar = "─";
+                    if (line.length === 2) {
+                        const candidate = Array.from(line)[1];
+                        if (candidate && candidate.codePointAt(0) >= 32) {
+                            dividerChar = candidate;
+                        }
+                    }
+                    const repeated = dividerChar.repeat(250);
+
+                    const div = document.createElement("div");
+                    div.textContent = repeated;
+                    div.style.width = "100%";
+                    div.style.whiteSpace = "nowrap";
+                    div.style.overflow = "hidden";
+                    div.style.color = this.colorToCss(state.fg_color);
+                    if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
+                        div.style.backgroundColor = this.colorToCss(state.bg_color);
+                    }
+                    this.applySectionIndent(div, state);
+
+                    return [div];
+                }
             }
 
-            let outputParts = this.makeOutput(state, line);
-            // outputParts can contain text (tuple) and special objects (fields/checkbox)
-            if (outputParts) {
-
-                // create parent div container to apply proper section indent
-                let container = document.createElement("div");
-                this.applyAlignment(container, state);
-                this.applySectionIndent(container, state);
-
-                this.appendOutput(container, outputParts, state);
-
-                // if theres a background color, wrap with outer div
-                if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
-                    const outerDiv = document.createElement("div");
-                    outerDiv.style.backgroundColor = this.colorToCss(state.bg_color);
-                    outerDiv.style.width = "100%";
-                    outerDiv.style.display = "block";
-                    outerDiv.appendChild(container);
-                    return [outerDiv];
-                }
-                return [container];
-            } else {
-                // empty line but maintain background color if set
-                const br = document.createElement("br");
-                if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
-                    const outerDiv = document.createElement("div");
-                    outerDiv.style.backgroundColor = this.colorToCss(state.bg_color);
-                    outerDiv.style.width = "100%";
-                    outerDiv.style.height = "1.2em";
-                    outerDiv.style.display = "block";
-
-                    const innerDiv = document.createElement("div");
-                    this.applySectionIndent(innerDiv, state);
-                    innerDiv.appendChild(br);
-                    outerDiv.appendChild(innerDiv);
-
-                    return [outerDiv];
-                }
-                return [br];
+            let outputParts = this.makeOutput(state, line, preEscape);
+            if (!outputParts || outputParts.length === 0) {
+                return [];
             }
+
+            let container = document.createElement("div");
+            this.applyAlignment(container, state);
+            this.applySectionIndent(container, state);
+
+            this.appendOutput(container, outputParts, state);
+
+            if (state.bg_color !== state.default_bg && state.bg_color !== "default") {
+                const outerDiv = document.createElement("div");
+                outerDiv.style.backgroundColor = this.colorToCss(state.bg_color);
+                outerDiv.style.width = "100%";
+                outerDiv.style.display = "block";
+                outerDiv.appendChild(container);
+                return [outerDiv];
+            }
+            return [container];
         } else {
             // Empty line handling for just newline background color
             const br = document.createElement("br");
@@ -637,9 +604,8 @@ applyStyleToElement(el, style, defaultBg = "default") {
         return null;
     }
 
-    makeOutput(state, line) {
+    makeOutput(state, line, preEscape = false) {
         if (state.literal) {
-            // literal mode: output as is, except if `= line
             if (line === "\\`=") {
                 line = "`=";
             }
@@ -653,7 +619,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
         let output = [];
         let part = "";
         let mode = "text";
-        let escape = false;
+        let escape = preEscape;
         let skip = 0;
 
         const flushPart = () => {
@@ -689,27 +655,21 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         state.formatting.italic = !state.formatting.italic;
                         break;
                     case 'F':
-                       /* 
-                       if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) { // fallback truecolor for NomadNet, `FTabcdef -> `Fbdf`Face  
-                            let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
-                            state.fg_color = color;
-                            skip = 8;
-                            break;
-                        }
-                       */
-
-                        // New 0.9.9 truecolor `FT tag
                         if (line[i+1] == "T" && line.length >= i + 8) {
                             let color = line.substr(i + 2, 6);
                             state.fg_color = color;
                             skip = 7;
                             break;
                         }
-                        
-                  
-                        // next 3 chars => fg color
-                        if (line.length >= i + 4) {
 
+                        if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) {
+                            let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
+                            state.fg_color = color;
+                            skip = 8;
+                            break;
+                        }
+
+                        if (line.length >= i + 4) {
                             let color = line.substr(i + 1, 3);
                             state.fg_color = color;
                             skip = 3;
@@ -720,32 +680,27 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         state.fg_color = state.default_fg;
                         break;
                     case 'B':
-                        /*
-                        if (line[i+4] == "`" && line[i+5] == "F" && line.length >= i + 9) { // fallback truecolor for NomadNet, `FTabcdef -> `Fbdf`Face  
-                            let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
-                            state.bg_color = color;
-                            skip = 8;
-                            flushPart(); // flush current part when background color changes
-                            break;
-                        }  
-                        */
-                        
-                        // New 0.9.9 truecolor `BT tag
-                        if (line[i+1] == "T" && line.length >= i + 8) { 
+                        if (line[i+1] == "T" && line.length >= i + 8) {
                             let color = line.substr(i + 2, 6);
                             state.bg_color = color;
                             skip = 7;
-                            flushPart(); // flush current part when background color changes
+                            flushPart();
                             break;
                         }
-                        
-                  
-                        // next 3 chars => bg color
+
+                        if (line[i+4] == "`" && line[i+5] == "B" && line.length >= i + 9) {
+                            let color = line[i+6]+line[i+1]+line[i+7]+line[i+2]+line[i+8]+line[i+3];
+                            state.bg_color = color;
+                            skip = 8;
+                            flushPart();
+                            break;
+                        }
+
                         if (line.length >= i + 4) {
                             let color = line.substr(i + 1, 3);
                             state.bg_color = color;
                             skip = 3;
-                            flushPart(); // flush current part when background color changes
+                            flushPart();
                         }
                         break;
                     case 'b':
@@ -978,23 +933,176 @@ applyStyleToElement(el, style, defaultBg = "default") {
         return {obj: obj, skip: skip};
     }
 
+    parsePartial(line) {
+        const endpos = line.indexOf("}");
+        if (endpos === -1) return null;
+
+        const data = line.substring(0, endpos);
+        const components = data.split("`");
+
+        let partial_url = "";
+        let partial_refresh = null;
+        let partial_fields_str = "";
+
+        if (components.length === 1) {
+            partial_url = components[0];
+        } else if (components.length === 2) {
+            partial_url = components[0];
+            const r = parseFloat(components[1]);
+            if (!isNaN(r)) partial_refresh = r;
+        } else if (components.length === 3) {
+            partial_url = components[0];
+            const r = parseFloat(components[1]);
+            if (!isNaN(r)) partial_refresh = r;
+            partial_fields_str = components[2];
+        }
+
+        if (partial_refresh !== null && partial_refresh < 1) partial_refresh = null;
+
+        let partial_id = null;
+        const partial_fields = partial_fields_str.length > 0 ? partial_fields_str.split("|") : [];
+        for (const f of partial_fields) {
+            if (f.startsWith("pid=")) {
+                partial_id = f.substring(4);
+            }
+        }
+
+        if (!partial_url) return null;
+
+        const formattedUrl = MicronParser.formatNomadnetworkUrl(partial_url);
+        const el = document.createElement("div");
+        el.className = "Mu-partial";
+        el.textContent = "⧖";
+        el.setAttribute("data-partial-url", formattedUrl);
+        el.setAttribute("data-partial-destination", partial_url);
+        el.setAttribute("data-partial-descriptor", data);
+        if (partial_id !== null) el.setAttribute("data-partial-id", partial_id);
+        if (partial_refresh !== null) el.setAttribute("data-partial-refresh", String(partial_refresh));
+        if (partial_fields.length > 0) el.setAttribute("data-partial-fields", partial_fields.join("|"));
+
+        return [el];
+    }
+
+    static bindPartials(root, fetcher, options = {}) {
+        if (!root) return () => {};
+        const elements = root.querySelectorAll(".Mu-partial:not([data-partial-bound])");
+        const intervals = [];
+        const controllers = new Map();
+
+        const readPartial = (el) => {
+            const url = el.getAttribute("data-partial-url");
+            const destination = el.getAttribute("data-partial-destination") || url;
+            const descriptor = el.getAttribute("data-partial-descriptor") || "";
+            const refresh = parseFloat(el.getAttribute("data-partial-refresh") || "0");
+            const fieldsAttr = el.getAttribute("data-partial-fields") || "";
+            const fields = fieldsAttr.length > 0 ? fieldsAttr.split("|") : [];
+            const id = el.getAttribute("data-partial-id");
+            return { url, destination, descriptor, refresh, fields, id, element: el };
+        };
+
+        const apply = (el, result) => {
+            if (result == null) return;
+            if (typeof result === "string") {
+                el.innerHTML = result;
+            } else if (typeof Node !== "undefined" && result instanceof Node) {
+                el.replaceChildren(result);
+            } else if (result && typeof result.markup === "string") {
+                el.innerHTML = result.markup;
+            }
+            el.setAttribute("data-partial-loaded", String(Date.now()));
+            el.dispatchEvent(new CustomEvent("partial-loaded", { bubbles: true, detail: { result } }));
+        };
+
+        const load = async (el) => {
+            const info = readPartial(el);
+            if (!info.url) return;
+            const previous = controllers.get(el);
+            if (previous) previous.abort();
+            const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+            if (controller) controllers.set(el, controller);
+            el.dispatchEvent(new CustomEvent("partial-loading", { bubbles: true, detail: info }));
+            try {
+                const result = await fetcher({ ...info, signal: controller ? controller.signal : null });
+                apply(el, result);
+            } catch (e) {
+                el.setAttribute("data-partial-error", String(e && e.message ? e.message : e));
+                el.dispatchEvent(new CustomEvent("partial-error", { bubbles: true, detail: { error: e, info } }));
+            } finally {
+                if (controllers.get(el) === controller) controllers.delete(el);
+            }
+        };
+
+        elements.forEach(el => {
+            el.setAttribute("data-partial-bound", "1");
+            if (options.lazy !== true) load(el);
+            const refresh = parseFloat(el.getAttribute("data-partial-refresh") || "0");
+            if (refresh >= 1) {
+                const tid = setInterval(() => load(el), refresh * 1000);
+                intervals.push(tid);
+            }
+        });
+
+        const cleanup = () => {
+            intervals.forEach(clearInterval);
+            controllers.forEach(c => c.abort());
+            controllers.clear();
+            elements.forEach(el => el.removeAttribute("data-partial-bound"));
+        };
+
+        cleanup.reload = (predicate) => {
+            elements.forEach(el => {
+                if (!predicate || predicate(readPartial(el))) load(el);
+            });
+        };
+
+        return cleanup;
+    }
+
     splitAtSpaces(line) {
         let out = "";
-        let wordArr = line.split(/(?<= )/g);
-        for (let i = 0; i < wordArr.length; i++) {
-            out += "<span class='Mu-mws'>" + this.forceMonospace(wordArr[i]) + "</span>";
+        const wordArr = line.split(/(?<= )/g);
+        for (const word of wordArr) {
+            out += this.wrapWord(word);
         }
         return out;
     }
 
-    forceMonospace(line) {
-        let out = "";
-        // Properly split compount emoji, source: https://stackoverflow.com/a/71619350
-        let charArr = [...new Intl.Segmenter().segment(line)].map(x => x.segment);
-        for (let char of charArr) {
-            out += "<span class='Mu-mnt'>" + char + "</span>";
+    wrapWord(word) {
+        if (word.length === 0) return "";
+        let needsWrap = false;
+        for (let i = 0; i < word.length; i++) {
+            const code = word.charCodeAt(i);
+            if (code < 0x20 || code >= 0x7F || code === 0x26 || code === 0x3C || code === 0x3E) {
+                needsWrap = true;
+                break;
+            }
         }
-        return out;
+        if (!needsWrap) return word;
+
+        if (!this._segmenter && typeof Intl !== "undefined" && Intl.Segmenter) {
+            this._segmenter = new Intl.Segmenter();
+        }
+        const charArr = this._segmenter
+            ? Array.from(this._segmenter.segment(word), s => s.segment)
+            : Array.from(word);
+
+        let inner = "";
+        for (const ch of charArr) {
+            const isComplex = ch.length > 1
+                || ch.charCodeAt(0) < 0x20
+                || ch.charCodeAt(0) >= 0x7F
+                || ch === "&" || ch === "<" || ch === ">";
+            if (isComplex) {
+                inner += "<span class='Mu-mnt'>" + ch + "</span>";
+            } else {
+                inner += ch;
+            }
+        }
+        return "<span class='Mu-mws'>" + inner + "</span>";
+    }
+
+    forceMonospace(line) {
+        return this.wrapWord(line);
     }
 }
 
