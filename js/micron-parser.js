@@ -987,6 +987,8 @@ applyStyleToElement(el, style, defaultBg = "default") {
         if (!input || !input.tagName || input.tagName.toLowerCase() === "textarea") return input;
         const owner = input.ownerDocument || (typeof document !== "undefined" ? document : null);
         if (!owner) return input;
+        const inputType = (input.type || "").toLowerCase();
+        if (inputType === "password") return input;
 
         const ta = owner.createElement("textarea");
         ta.name = input.name;
@@ -1129,7 +1131,8 @@ applyStyleToElement(el, style, defaultBg = "default") {
             const el = e.target;
             if (!el || el.tagName !== "INPUT") return;
             const t = (el.type || "text").toLowerCase();
-            if (t !== "text" && t !== "password" && t !== "") return;
+            if (t === "password") return;
+            if (t !== "text" && t !== "") return;
             if (filter && !filter(el)) return;
 
             const now = Date.now();
@@ -1186,7 +1189,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
         if (typeof selectorOrPredicate === "string") {
             candidates = Array.from(root.querySelectorAll(selectorOrPredicate));
         } else if (typeof selectorOrPredicate === "function") {
-            const all = Array.from(root.querySelectorAll('input[type="text"], input[type="password"], input:not([type])'));
+            const all = Array.from(root.querySelectorAll('input[type="text"], input:not([type])'));
             for (const el of all) {
                 const info = {
                     name: el.name,
@@ -1213,6 +1216,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
 
         const upgraded = [];
         for (const el of candidates) {
+            if (el && el.type && el.type.toLowerCase() === "password") continue;
             const opts = el._micronUpgradeOpts || options;
             if (el._micronUpgradeOpts) delete el._micronUpgradeOpts;
             upgraded.push(MicronParser.upgradeInputToTextarea(el, opts));
