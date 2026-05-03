@@ -1,6 +1,7 @@
 name: Minify build action
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'js/micron-parser.js'
