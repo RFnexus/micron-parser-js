@@ -983,6 +983,243 @@ applyStyleToElement(el, style, defaultBg = "default") {
         return [el];
     }
 
+    static upgradeInputToTextarea(input, options = {}) {
+        if (!input || !input.tagName || input.tagName.toLowerCase() === "textarea") return input;
+        const owner = input.ownerDocument || (typeof document !== "undefined" ? document : null);
+        if (!owner) return input;
+
+        const ta = owner.createElement("textarea");
+        ta.name = input.name;
+        const currentValue = (typeof input.value === "string" && input.value.length > 0)
+            ? input.value
+            : (input.getAttribute("value") || "");
+        ta.value = currentValue;
+
+        const cols = (typeof options.cols === "number") ? options.cols
+            : (input.size > 0 ? input.size : null);
+        if (cols) ta.cols = cols;
+        if (typeof options.rows === "number") ta.rows = options.rows;
+        else if (!ta.rows || ta.rows < 2) ta.rows = 4;
+        if (options.wrap) ta.wrap = options.wrap;
+        if (input.disabled) ta.disabled = true;
+        if (input.readOnly) ta.readOnly = true;
+        if (input.placeholder) ta.placeholder = input.placeholder;
+        if (input.required) ta.required = true;
+        if (input.autocomplete) ta.autocomplete = input.autocomplete;
+
+        if (input.style && input.style.cssText) ta.style.cssText = input.style.cssText;
+
+        const skipAttrs = new Set(["type", "value", "size", "name"]);
+        for (const attr of Array.from(input.attributes || [])) {
+            if (skipAttrs.has(attr.name)) continue;
+            if (attr.name === "style") continue;
+            try { ta.setAttribute(attr.name, attr.value); } catch (e) {}
+        }
+        if (input.classList && input.classList.length > 0) {
+            ta.className = input.className;
+        }
+
+        const wasFocused = (owner.activeElement === input);
+        const selStart = (typeof input.selectionStart === "number") ? input.selectionStart : null;
+        const selEnd = (typeof input.selectionEnd === "number") ? input.selectionEnd : null;
+
+        ta.setAttribute("data-micron-original-tag", "input");
+        ta.setAttribute("data-micron-original-type", input.type || "text");
+
+        input.replaceWith(ta);
+
+        if (wasFocused && typeof ta.focus === "function") {
+            try {
+                ta.focus();
+                if (selStart !== null && selEnd !== null && typeof ta.setSelectionRange === "function") {
+                    ta.setSelectionRange(selStart, selEnd);
+                }
+            } catch (e) {}
+        }
+
+        ta.dispatchEvent(new CustomEvent("micron-field-upgraded", {
+            bubbles: true,
+            detail: { from: "input", to: "textarea", element: ta, previous: input }
+        }));
+        return ta;
+    }
+
+    static upgradeTextareaToInput(textarea, options = {}) {
+        if (!textarea || !textarea.tagName || textarea.tagName.toLowerCase() === "input") return textarea;
+        const owner = textarea.ownerDocument || (typeof document !== "undefined" ? document : null);
+        if (!owner) return textarea;
+
+        const input = owner.createElement("input");
+        const originalType = textarea.getAttribute("data-micron-original-type");
+        input.type = options.type || originalType || (options.masked ? "password" : "text");
+        input.name = textarea.name;
+        input.setAttribute("value", textarea.value || "");
+        const size = (typeof options.size === "number") ? options.size
+            : (textarea.cols > 0 ? textarea.cols : null);
+        if (size) input.size = size;
+        if (textarea.disabled) input.disabled = true;
+        if (textarea.readOnly) input.readOnly = true;
+        if (textarea.placeholder) input.placeholder = textarea.placeholder;
+        if (textarea.required) input.required = true;
+        if (textarea.autocomplete) input.autocomplete = textarea.autocomplete;
+
+        if (textarea.style && textarea.style.cssText) input.style.cssText = textarea.style.cssText;
+
+        const skipAttrs = new Set(["rows", "cols", "wrap", "value", "name", "data-micron-original-tag", "data-micron-original-type"]);
+        for (const attr of Array.from(textarea.attributes || [])) {
+            if (skipAttrs.has(attr.name)) continue;
+            if (attr.name === "style") continue;
+            try { input.setAttribute(attr.name, attr.value); } catch (e) {}
+        }
+        if (textarea.classList && textarea.classList.length > 0) {
+            input.className = textarea.className;
+        }
+
+        const wasFocused = (owner.activeElement === textarea);
+        const selStart = (typeof textarea.selectionStart === "number") ? textarea.selectionStart : null;
+        const selEnd = (typeof textarea.selectionEnd === "number") ? textarea.selectionEnd : null;
+
+        textarea.replaceWith(input);
+
+        if (wasFocused && typeof input.focus === "function") {
+            try {
+                input.focus();
+                if (selStart !== null && selEnd !== null && typeof input.setSelectionRange === "function") {
+                    input.setSelectionRange(selStart, selEnd);
+                }
+            } catch (e) {}
+        }
+
+        input.dispatchEvent(new CustomEvent("micron-field-upgraded", {
+            bubbles: true,
+            detail: { from: "textarea", to: "input", element: input, previous: textarea }
+        }));
+        return input;
+    }
+
+    static enableDoubleEnterMultiline(root, options = {}) {
+        if (!root || typeof root.addEventListener !== "function") return () => {};
+        const windowMs = typeof options.windowMs === "number" ? options.windowMs : 500;
+        const rows = typeof options.rows === "number" ? options.rows : 4;
+        const filter = typeof options.filter === "function" ? options.filter : null;
+        const suppressFirst = options.suppressFirstEnter !== false;
+        const lastEnter = new WeakMap();
+        const armTimers = new WeakMap();
+
+        const disarm = (el) => {
+            if (lastEnter.has(el)) {
+                lastEnter.delete(el);
+                try {
+                    el.dispatchEvent(new CustomEvent("micron-multiline-disarmed", {
+                        bubbles: true,
+                        detail: { element: el }
+                    }));
+                } catch (_) {}
+            }
+            const t = armTimers.get(el);
+            if (t) {
+                clearTimeout(t);
+                armTimers.delete(el);
+            }
+        };
+
+        const onKey = (e) => {
+            if (e.key !== "Enter" || e.isComposing) return;
+            if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+            const el = e.target;
+            if (!el || el.tagName !== "INPUT") return;
+            const t = (el.type || "text").toLowerCase();
+            if (t !== "text" && t !== "password" && t !== "") return;
+            if (filter && !filter(el)) return;
+
+            const now = Date.now();
+            const prev = lastEnter.get(el) || 0;
+            if (prev > 0 && (now - prev) <= windowMs) {
+                e.preventDefault();
+                disarm(el);
+                const cursor = (typeof el.selectionStart === "number") ? el.selectionStart : el.value.length;
+                const ta = MicronParser.upgradeInputToTextarea(el, { rows });
+                const before = (ta.value || "").slice(0, cursor);
+                const after = (ta.value || "").slice(cursor);
+                ta.value = before + "\n" + after;
+                try {
+                    ta.focus();
+                    if (typeof ta.setSelectionRange === "function") {
+                        ta.setSelectionRange(before.length + 1, before.length + 1);
+                    }
+                } catch (_) {}
+                try {
+                    ta.dispatchEvent(new CustomEvent("micron-field-multiline-enabled", {
+                        bubbles: true,
+                        detail: { element: ta, trigger: "double-enter" }
+                    }));
+                } catch (_) {}
+                return;
+            }
+            if (suppressFirst) e.preventDefault();
+            lastEnter.set(el, now);
+            try {
+                el.dispatchEvent(new CustomEvent("micron-multiline-armed", {
+                    bubbles: true,
+                    detail: { element: el, windowMs }
+                }));
+            } catch (_) {}
+            const tid = setTimeout(() => disarm(el), windowMs + 16);
+            armTimers.set(el, tid);
+        };
+
+        const onBlur = (e) => {
+            if (e.target && e.target.tagName === "INPUT") disarm(e.target);
+        };
+
+        root.addEventListener("keydown", onKey);
+        root.addEventListener("blur", onBlur, true);
+        return () => {
+            root.removeEventListener("keydown", onKey);
+            root.removeEventListener("blur", onBlur, true);
+        };
+    }
+
+    static enableMultiline(root, selectorOrPredicate, options = {}) {
+        if (!root) return [];
+        let candidates = [];
+        if (typeof selectorOrPredicate === "string") {
+            candidates = Array.from(root.querySelectorAll(selectorOrPredicate));
+        } else if (typeof selectorOrPredicate === "function") {
+            const all = Array.from(root.querySelectorAll('input[type="text"], input[type="password"], input:not([type])'));
+            for (const el of all) {
+                const info = {
+                    name: el.name,
+                    value: (el.getAttribute("value") || el.value || ""),
+                    size: el.size,
+                    masked: (el.type === "password"),
+                    element: el
+                };
+                const decision = selectorOrPredicate(info);
+                if (decision) {
+                    candidates.push(el);
+                    el._micronUpgradeOpts = (typeof decision === "object") ? decision : null;
+                }
+            }
+        } else if (Array.isArray(selectorOrPredicate)) {
+            for (const item of selectorOrPredicate) {
+                if (typeof item === "string") {
+                    Array.from(root.querySelectorAll(`input[name="${item}"]`)).forEach(el => candidates.push(el));
+                } else if (item && item.tagName) {
+                    candidates.push(item);
+                }
+            }
+        }
+
+        const upgraded = [];
+        for (const el of candidates) {
+            const opts = el._micronUpgradeOpts || options;
+            if (el._micronUpgradeOpts) delete el._micronUpgradeOpts;
+            upgraded.push(MicronParser.upgradeInputToTextarea(el, opts));
+        }
+        return upgraded;
+    }
+
     static bindPartials(root, fetcher, options = {}) {
         if (!root) return () => {};
         const elements = root.querySelectorAll(".Mu-partial:not([data-partial-bound])");

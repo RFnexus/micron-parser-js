@@ -24,6 +24,32 @@
             font-family: Roboto Mono Nerd Font, monospace, monospace !important;
             line-height: normal !important;
         }
+
+        #output input.Mu-armed {
+            outline: 1px dashed #fbbf24;
+            outline-offset: 1px;
+        }
+        #output textarea.Mu-multiline {
+            outline: 1px solid #34d399;
+            outline-offset: 1px;
+            resize: vertical;
+        }
+        #multiline-hint {
+            position: fixed;
+            bottom: 0.75rem;
+            right: 0.75rem;
+            padding: 0.35rem 0.6rem;
+            border-radius: 0.25rem;
+            background: rgba(251, 191, 36, 0.9);
+            color: #111;
+            font-size: 0.75rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        #multiline-hint.visible {
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="bg-black text-white h-screen  flex flex-col overflow-y-hidden">
@@ -471,6 +497,7 @@ To display literal content, for example source-code, or blocks of text that shou
             <pre id="output" class="bg-black break-words whitespace-pre-wrap p-4 text-wrap"></pre>
         </div>
     </div>
+    <div id="multiline-hint">Press Enter again to expand to multi-line</div>
 
     <script type="module">
         import MicronParser from './js/micron-parser.js';
@@ -533,10 +560,26 @@ To display literal content, for example source-code, or blocks of text that shou
                 this.editorPane = document.getElementById('editor-pane');
                 this.output = document.getElementById('output');
                 this.tabsContainer = document.getElementById('tabs');
+                this.multilineHint = document.getElementById('multiline-hint');
 
                 this.newFileBtn = document.getElementById('newFile');
                 this.saveFileBtn = document.getElementById('saveFile')
                 this.hideEditorBtn = document.getElementById('hideEditor');
+
+                this.multilineCleanup = null;
+
+                this.output.addEventListener('micron-multiline-armed', (e) => {
+                    e.detail.element.classList.add('Mu-armed');
+                    this.multilineHint.classList.add('visible');
+                });
+                this.output.addEventListener('micron-multiline-disarmed', (e) => {
+                    e.detail.element.classList.remove('Mu-armed');
+                    this.multilineHint.classList.remove('visible');
+                });
+                this.output.addEventListener('micron-field-multiline-enabled', (e) => {
+                    e.detail.element.classList.add('Mu-multiline');
+                    this.multilineHint.classList.remove('visible');
+                });
 
                 this.setupEventListeners();
                 this.renderTabs();
@@ -550,9 +593,21 @@ To display literal content, for example source-code, or blocks of text that shou
                 this.hideEditorBtn.addEventListener('click', () => this.toggleEditor());
             }
 
+            renderOutput(content) {
+                if (this.multilineCleanup) {
+                    this.multilineCleanup();
+                    this.multilineCleanup = null;
+                }
+                this.output.innerHTML = this.parser.convertMicronToHtml(content);
+                this.multilineCleanup = MicronParser.enableDoubleEnterMultiline(this.output, {
+                    windowMs: 500,
+                    rows: 4,
+                });
+            }
+
             handleInput() {
                 const content = this.editor.value;
-                this.output.innerHTML = this.parser.convertMicronToHtml(content);
+                this.renderOutput(content);
                 if (this.fileManager.currentFile) {
                     this.fileManager.updateFile(this.fileManager.currentFile, content);
                 }
@@ -641,7 +696,7 @@ To display literal content, for example source-code, or blocks of text that shou
                 if (this.fileManager.currentFile) {
                     const content = this.fileManager.files[this.fileManager.currentFile];
                     this.editor.value = content;
-                    this.output.innerHTML = this.parser.convertMicronToHtml(content);
+                    this.renderOutput(content);
                 }
             }
         }
