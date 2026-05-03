@@ -185,11 +185,11 @@ If no heading text is defined, the section will appear as a sub-section without 
 
 Tags are used to format text with micron. Some tags can appear anywhere in text, and some must appear at the beginning of a line. If you need to write text that contains a sequence that would be interpreted as a tag, you can escape it with the character \\.
 
-In the following sections, the different tags will be introduced. Any styling set within micron can be reset to the default style by using the special \\`\\` tag anywhere in the markup, which will immediately remove any formatting previously specified.
+In the following sections, the different tags will be introduced. Any styling set within micron can be reset to the default style by using the special \`\` tag anywhere in the markup, which will immediately remove any formatting previously specified.
 
 >>Alignment
 
-To control text alignment use the tag \\`c to center text, \\`l to left-align, \\`r to right-align, and \\`a to return to the default alignment of the document. Alignment tags must appear at the beginning of a line. Here is an example:
+To control text alignment use the tag \`c to center text, \`l to left-align, \`r to right-align, and \`a to return to the default alignment of the document. Alignment tags must appear at the beginning of a line. Here is an example:
 
 `Faaa
 `=
@@ -217,7 +217,7 @@ So will this.
 
 >>Formatting
 
-Text can be formatted as `!bold`! by using the \\`! tag, `_underline`_ by using the \\`_ tag and `*italic`* by using the \\`* tag.
+Text can be formatted as `!bold`! by using the \`! tag, `_underline`_ by using the \`_ tag and `*italic`* by using the \`* tag.
 
 Here's an example of formatting text:
 
@@ -277,7 +277,7 @@ Wait! It's worth noting that we can also create sections without headings. They 
 
 >Colors
 
-Foreground colors can be specified with the \\`F tag, followed by three hexadecimal characters. To return to the default foreground color, use the \\`f tag. Background color is specified in the same way, but by using the \\`B and \\`b tags.
+Foreground colors can be specified with the \`F tag, followed by three hexadecimal characters. To return to the default foreground color, use the \`f tag. Background color is specified in the same way, but by using the \`B and \`b tags.
 
 Here's a few examples:
 
@@ -298,7 +298,7 @@ You can use `B5d5`F222 color `f`B333 `Ff00f`Ff80o`Ffd0r`F9f0m`F0f2a`F0fdt`F07ft`
 
 >Links
 
-Links to pages, files or other resources can be created with the \\`[ tag, which should always be terminated with a closing ]. You can create links with and without labels, it is up to you to control the formatting of links with other tags. Although not strictly necessary, it is good practice to at least format links with underlining.
+Links to pages, files or other resources can be created with the \`[ tag, which should always be terminated with a closing ]. You can create links with and without labels, it is up to you to control the formatting of links with other tags. Although not strictly necessary, it is good practice to at least format links with underlining.
 
 Here's a few examples:
 
@@ -340,7 +340,7 @@ Links can contain request variables and a list of fields to submit to the node-s
 `=
 ``
 
-Note the `!*`! following the extra `!\\``! at the end of the path. This `!*`! denotes `*all fields`*. You can also specify a list of fields to include:
+Note the `!*`! following the extra `!\``! at the end of the path. This `!*`! denotes `*all fields`*. You can also specify a list of fields to include:
 
 `Faaa
 `=
@@ -480,7 +480,7 @@ This line will
 
 >Literals
 
-To display literal content, for example source-code, or blocks of text that should not be interpreted by micron, you can use literal blocks, specified by the \\`= tag. Below is the source code of this entire document, presented as a literal block.
+To display literal content, for example source-code, or blocks of text that should not be interpreted by micron, you can use literal blocks, specified by the \`= tag. Below is the source code of this entire document, presented as a literal block.
 
 -
 
