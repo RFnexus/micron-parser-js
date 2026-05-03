@@ -308,7 +308,7 @@ class MicronParser {
                         const hr = document.createElement("hr");
                         hr.style.all = "revert";
                         hr.style.borderColor = this.colorToCss(state.fg_color);
-                        hr.style.margin = "0.5em 0.5em 0.5em 0.5em";
+                        hr.style.margin = "0.5em 0 0.5em 0";
                         hr.style.boxShadow = "0 0 0 0.5em " + this.colorToCss(state.bg_color);
                         this.applySectionIndent(hr, state);
                         return [hr];
