@@ -16,6 +16,7 @@ class MicronParser {
         this.DEFAULT_FG_DARK = "ddd";
         this.DEFAULT_FG_LIGHT = "222";
         this.DEFAULT_BG = "default";
+        this.MAX_TABLE_WIDTH = 100;
 
         if (this.enableForceMonospace) {
             this.injectMonospaceStyles();
@@ -142,7 +143,11 @@ class MicronParser {
             align: "left",
             default_fg: defaultFg,
             default_bg: defaultBg,
-            radio_groups: {}
+            radio_groups: {},
+            table_mode: false,
+            table_buffer: [],
+            table_align: null,
+            table_maxwidth: this.MAX_TABLE_WIDTH
         };
 
         const lines = markup.split("\n");
@@ -205,7 +210,11 @@ class MicronParser {
             align: "left",
             default_fg: defaultFg,
             default_bg: defaultBg,
-            radio_groups: {}
+            radio_groups: {},
+            table_mode: false,
+            table_buffer: [],
+            table_align: null,
+            table_maxwidth: this.MAX_TABLE_WIDTH
         };
 
         // create container div for page-level colors
@@ -242,6 +251,39 @@ class MicronParser {
         if (line.length > 0) {
             if (line === "`=") {
                 state.literal = !state.literal;
+                return [];
+            }
+
+            if (line.startsWith("`t")) {
+                let rest = line.slice(2);
+                let align = null;
+                if (rest.length > 0 && (rest[0] === 'l' || rest[0] === 'c' || rest[0] === 'r')) {
+                    align = rest[0];
+                    rest = rest.slice(1);
+                }
+                let maxWidth = null;
+                if (rest.length > 0) {
+                    const w = parseInt(rest, 10);
+                    if (!isNaN(w)) maxWidth = w;
+                }
+                if (state.table_mode) {
+                    const widgets = this.renderTable(state.table_buffer, state);
+                    state.table_mode = false;
+                    state.table_buffer = [];
+                    state.table_align = null;
+                    state.table_maxwidth = this.MAX_TABLE_WIDTH;
+                    return widgets || [];
+                } else {
+                    state.table_mode = true;
+                    state.table_buffer = [];
+                    state.table_align = align;
+                    state.table_maxwidth = maxWidth;
+                    return [];
+                }
+            }
+
+            if (state.table_mode) {
+                state.table_buffer.push(line);
                 return [];
             }
 
@@ -1297,6 +1339,114 @@ applyStyleToElement(el, style, defaultBg = "default") {
         };
 
         return cleanup;
+    }
+
+    renderTable(lines, state) {
+        if (lines.length < 2) return null;
+
+        const headerCells = this._parseTableRow(lines[0]);
+        const alignments = this._parseTableAlignments(lines[1]);
+        while (alignments.length < headerCells.length) alignments.push('left');
+
+        const dataRows = [];
+        for (let i = 2; i < lines.length; i++) {
+            let cells = this._parseTableRow(lines[i]);
+            while (cells.length < headerCells.length) cells.push("");
+            cells = cells.slice(0, headerCells.length);
+            dataRows.push(cells);
+        }
+
+        const borderColor = this.colorToCss(state.fg_color) || "currentColor";
+        const cellBorder = "1px solid " + borderColor;
+        const cellPadding = "0.2em 0.5em";
+
+        const table = document.createElement("table");
+        table.style.borderCollapse = "collapse";
+        table.style.display = "inline-table";
+        if (state.table_maxwidth) {
+            table.style.maxWidth = (state.table_maxwidth * 0.6) + "em";
+        }
+
+        const thead = document.createElement("thead");
+        const headerRow = document.createElement("tr");
+        for (let i = 0; i < headerCells.length; i++) {
+            const th = document.createElement("th");
+            th.style.border = cellBorder;
+            th.style.padding = cellPadding;
+            th.style.textAlign = alignments[i] || 'left';
+            this._renderTableCell(th, headerCells[i], state);
+            headerRow.appendChild(th);
+        }
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        for (const row of dataRows) {
+            const tr = document.createElement("tr");
+            for (let i = 0; i < row.length; i++) {
+                const td = document.createElement("td");
+                td.style.border = cellBorder;
+                td.style.padding = cellPadding;
+                td.style.textAlign = alignments[i] || 'left';
+                this._renderTableCell(td, row[i], state);
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+
+        const wrapper = document.createElement("div");
+        this.applySectionIndent(wrapper, state);
+        if (state.table_align === 'c') wrapper.style.textAlign = "center";
+        else if (state.table_align === 'r') wrapper.style.textAlign = "right";
+        else if (state.table_align === 'l') wrapper.style.textAlign = "left";
+        wrapper.appendChild(table);
+
+        return [wrapper];
+    }
+
+    _renderTableCell(el, text, state) {
+        const snap = {
+            fg_color: state.fg_color,
+            bg_color: state.bg_color,
+            align: state.align,
+            formatting: { ...state.formatting }
+        };
+        const parts = this.makeOutput(state, text);
+        if (parts && parts.length > 0) {
+            this.appendOutput(el, parts, state);
+        }
+        state.fg_color = snap.fg_color;
+        state.bg_color = snap.bg_color;
+        state.align = snap.align;
+        state.formatting = snap.formatting;
+    }
+
+    _parseTableRow(line) {
+        line = line.trim();
+        if (line.startsWith('|')) line = line.slice(1);
+        if (line.endsWith('|')) line = line.slice(0, -1);
+        const cells = [];
+        let current = "";
+        let escaped = false;
+        for (const ch of line) {
+            if (escaped) { current += ch; escaped = false; }
+            else if (ch === '\\') escaped = true;
+            else if (ch === '|') { cells.push(current.trim()); current = ""; }
+            else current += ch;
+        }
+        cells.push(current.trim());
+        return cells;
+    }
+
+    _parseTableAlignments(line) {
+        const cells = this._parseTableRow(line);
+        return cells.map(c => {
+            c = c.trim();
+            if (c.startsWith(':') && c.endsWith(':')) return 'center';
+            if (c.endsWith(':')) return 'right';
+            return 'left';
+        });
     }
 
     splitAtSpaces(line) {
