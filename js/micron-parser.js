@@ -76,10 +76,44 @@ class MicronParser {
     }
 
     static formatNomadnetworkUrl(url) {
+        if (typeof url === "string" && url.startsWith("#")) {
+            return url;
+        }
         if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url)) {
             return url;
         }
         return `nomadnetwork://${url}`;
+    }
+
+    static _MICRON_STRIP_RE = /`[FB]T[0-9a-fA-F]{6}|`[FB][0-9a-fA-F]{3}|`:[A-Za-z0-9_\-]*|`[!*_=fbacrl`<>{]/g;
+
+    static slugifyMicron(text) {
+        if (text == null) return "";
+        const stripped = String(text).replace(MicronParser._MICRON_STRIP_RE, "");
+        return stripped
+            .replace(/[^A-Za-z0-9]+/g, "-")
+            .replace(/^-+/, "")
+            .replace(/-+$/, "")
+            .toLowerCase();
+    }
+
+    static _resolveEmptyAnchors(root) {
+        if (!root || typeof root.querySelectorAll !== "function") return;
+        const links = root.querySelectorAll('a[href="#"]');
+        if (!links.length) return;
+        const headers = Array.from(root.querySelectorAll(".micron-header-anchor"));
+        if (!headers.length) return;
+        for (const a of links) {
+            for (const h of headers) {
+                if (!h.id) continue;
+                const rel = a.compareDocumentPosition(h);
+                if (rel & Node.DOCUMENT_POSITION_FOLLOWING) {
+                    a.href = "#" + h.id;
+                    a.title = a.href;
+                    break;
+                }
+            }
+        }
     }
 
 
@@ -152,30 +186,31 @@ class MicronParser {
 
         const lines = markup.split("\n");
 
+        const tempContainer = document.createElement("div");
+        if (defaultFg && defaultFg !== "default") {
+            tempContainer.style.color = this.colorToCss(defaultFg);
+        }
+        if (defaultBg && defaultBg !== "default") {
+            tempContainer.style.backgroundColor = this.colorToCss(defaultBg);
+        }
+
         for (let line of lines) {
             const lineOutput = this.parseLine(line, state);
             if (lineOutput && lineOutput.length > 0) {
                 for (let el of lineOutput) {
-                    html += el.outerHTML;
+                    tempContainer.appendChild(el);
                 }
             } else if (lineOutput && lineOutput.length === 0) {
                 // skip
             } else {
-                html += "<br>";
+                tempContainer.appendChild(document.createElement("br"));
             }
         }
 
-        // wrap in container with page-level colors
-        let containerStyle = "";
-        if (defaultFg && defaultFg !== "default") {
-            containerStyle += `color: ${this.colorToCss(defaultFg)};`;
-        }
-        if (defaultBg && defaultBg !== "default") {
-            containerStyle += `background-color: ${this.colorToCss(defaultBg)};`;
-        }
-        if (containerStyle) {
-            html = `<div style="${containerStyle}">${html}</div>`;
-        }
+        MicronParser._resolveEmptyAnchors(tempContainer);
+
+        const hasContainerStyle = (defaultFg && defaultFg !== "default") || (defaultBg && defaultBg !== "default");
+        html = hasContainerStyle ? tempContainer.outerHTML : tempContainer.innerHTML;
 
        try {
         return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
@@ -242,6 +277,8 @@ class MicronParser {
                 container.appendChild(document.createElement("br"));
             }
         }
+
+        MicronParser._resolveEmptyAnchors(container);
 
         fragment.appendChild(container);
         return fragment;
@@ -327,6 +364,11 @@ class MicronParser {
 
                         let outputParts = this.makeOutput(state, headingLine);
                         this.styleToState(latched_style, state);
+
+                        const headerSlug = MicronParser.slugifyMicron(headingLine);
+                        if (headerSlug) {
+                            outputParts = [{type: "anchor", name: headerSlug, header: true}].concat(outputParts || []);
+                        }
 
                         if (outputParts && outputParts.length > 0) {
                             const outerDiv = document.createElement("div");
@@ -487,9 +529,18 @@ class MicronParser {
                 }
                 currentSpan.innerHTML += text;
             } else if (p && typeof p === 'object') {
-                // field, checkbox, radio, link
+                // field, checkbox, radio, link, anchor
                 flushSpan();
-                if (p.type === "field") {
+                if (p.type === "anchor") {
+                    // styling renders nothing visible because we're in an inline anchor. mu-Anchor
+                    const a = document.createElement("a");
+                    a.id = p.name;
+                    a.className = p.header
+                        ? "micron-anchor micron-header-anchor"
+                        : "micron-anchor";
+                    a.setAttribute("aria-hidden", "true");
+                    container.appendChild(a);
+                } else if (p.type === "field") {
                     let input = document.createElement("input");
                     input.type = p.masked ? "password" : "text";
                     input.name = p.name;
@@ -794,6 +845,22 @@ applyStyleToElement(el, style, defaultBg = "default") {
                             continue;
                         }
                         break;
+
+                    case ':': {
+                        let nameStart = i + 1;
+                        let nameEnd = nameStart;
+                        while (nameEnd < line.length && /[A-Za-z0-9_\-]/.test(line[nameEnd])) {
+                            nameEnd++;
+                        }
+                        const anchorName = line.substring(nameStart, nameEnd);
+                        if (anchorName) {
+                            flushPart();
+                            output.push({type: "anchor", name: anchorName});
+                        }
+                        mode = "text";
+                        i = nameEnd;
+                        continue;
+                    }
 
                     default:
                         // unknown formatting char, ignore

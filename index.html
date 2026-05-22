@@ -102,6 +102,10 @@ To view the full guide click on the tab "NomadNetGuide.mu" in the top navigation
 To create a new Micron tab, click "New File".
         </div>
         <div hidden id="nomadNetGuideContent">
+>Outputting Formatted Text
+
+
+>>>>>>>>>>>>>>>
 -∿
 <
 
@@ -109,7 +113,7 @@ To create a new Micron tab, click "New File".
 Micron generates formatted text for your terminal
 `a
 
-
+>>>>>>>>>>>>>>>
 -∿
 <
 
@@ -117,6 +121,22 @@ Micron generates formatted text for your terminal
 Nomad Network supports a simple and functional markup language called `*micron`*. If you are familiar with `*markdown`* or `*HTML`*, you will feel right at home writing pages with micron.
 
 With micron you can easily create structured documents and pages with formatting, colors, glyphs and icons, ideal for display in terminals.
+
+>Table of Contents
+
+ `F44f`_`[A Few Demo Outputs`#a-few-demo-outputs]`_`f
+ `F44f`_`[Micron Tags`#micron-tags]`_`f
+ `F44f`_`[High Level Stuff`#high-level-stuff]`_`f
+ `F44f`_`[Colors`#colors]`_`f
+ `F44f`_`[Page Foreground and Background Colors`#page-foreground-and-background-colors]`_`f
+ `F44f`_`[Links`#links]`_`f
+ `F44f`_`[Anchors`#anchors]`_`f
+ `F44f`_`[Tables`#tables]`_`f
+ `F44f`_`[Fields & Requests`#fields-requests]`_`f
+ `F44f`_`[Comments`#comments]`_`f
+ `F44f`_`[Partials`#partials]`_`f
+ `F44f`_`[Literals`#literals]`_`f
+ `F44f`_`[Closing Remarks`#closing-remarks]`_`f
 
 >>Recommendations and Requirements
 
@@ -183,7 +203,7 @@ If no heading text is defined, the section will appear as a sub-section without 
 
 >Micron tags
 
-Tags are used to format text with micron. Some tags can appear anywhere in text, and some must appear at the beginning of a line. If you need to write text that contains a sequence that would be interpreted as a tag, you can escape it with the character \\.
+Tags are used to format text with micron. Some tags can appear anywhere in text, and some must appear at the beginning of a line. If you need to write text that contains a sequence that would be interpreted as a tag, you can escape it with the character \.
 
 In the following sections, the different tags will be introduced. Any styling set within micron can be reset to the default style by using the special \`\` tag anywhere in the markup, which will immediately remove any formatting previously specified.
 
@@ -295,6 +315,9 @@ You can use `B5d5`F222 color `f`B333 `Ff00f`Ff80o`Ffd0r`F9f0m`F0f2a`F0fdt`F07ft`
 
 ``
 
+>Page Foreground and Background Colors
+
+To specify a background color for the entire page, place the `!#!bg=X`! header on one of the first lines of your page, where `!X`! is the color you want to use, for example `!444`!. If you're also using the cache control header, the background specifier must come `*after`* the cache control header. Likewise, you can specify the default text color by using the `!#!fg=X`! header.
 
 >Links
 
@@ -325,6 +348,76 @@ Here is `F00f`_`[a more visible link`72914442a3689add83a09a767963f57c:/page/inde
 ``
 
 When links like these are displayed in the built-in browser, clicking on them or activating them using the keyboard will cause the browser to load the specified URL.
+
+>Anchors
+
+Anchors let you create jump points within a single page similar to anchors in HTML. You declare a position in the page with a name, then link to it from anywhere on the same page.
+
+>>Auto-anchors from headers
+
+Every section heading you write also becomes an anchor automatically. The anchor name is the heading text after `*slugifying`*: lowercased, with any run of non-alphanumeric characters replaced by a single hyphen, and leading or trailing hyphens stripped. So `*>Hello World`* becomes the anchor `*hello-world`*, and `*>Introduction & Setup`* becomes `*introduction-setup`*.
+
+>>Explicit anchors
+
+If you want an anchor, that isn't tied to a heading, place one anywhere in your text with the \`: tag, followed by a name. Names may contain the characters `*A-Z`*, `*a-z`*, `*0-9`*, `*_`* and `*-`*, and end at any other character (a space, a newline, or punctuation).
+
+The anchor itself takes up no space and does not render. Is's just a position marker. An explicit anchor declared on an otherwise empty line binds to that line's position.
+
+`Faaa
+`=
+`:install-notes
+Some installation notes for the user.
+
+You can also drop one mid-line. Example: see `:tip-3 ⚠ tip 3 below for caveats.
+`=
+``
+
+>>Linking to an anchor
+
+Reuse the standard link syntax, with a `*#`*-prefixed URL:
+
+`Faaa
+`=
+`[Jump to Install Notes`#install-notes]
+`=
+``
+
+When the user activates the link the browser scrolls the current page to the anchor's row.
+
+>>Jumping to the next section
+
+If the URL is just `*#`* with no name after it, the link jumps to the next \`> header that appears after the link's own position in the document. This is convenient for "Continue ↓" buttons after a long paragraph, without having to name every section:
+
+`Faaa
+`=
+`[Continue`#]
+`=
+``
+
+>>Anchors in external links
+
+If you want to link to an anchor on another page, you can include it as a request variable:
+
+`Faaa
+`=
+`[Conclusion`a8d24177d946de4f1f0a0fe1af9a1338:/page/document.mu`anchor=conclusion]
+`=
+``
+
+>>Notes on namespaces and collisions
+
+Auto-anchors from headings and explicit \`: anchors share a single namespace per page. If an explicit anchor collides with a heading slug, the first one declared is where it will jump to.
+
+>Tables
+
+You can include rendered tables by enclosing them in \`t tags. Optionally, you can also specify alignment and max rendering width by adding these properties to the opening \`t tag, like \`tc30. Here's an example:
+
+`t
+| Name | Price | Qty |
+| ---- | :---: | --: |
+| `F3a3Apple`f | Free | `!5`! |
+| Orange | Ask, nicely | 3 |
+`t
 
 >Fields & Requests
 
@@ -412,7 +505,8 @@ A masked input field: `B444`&lt;!|masked_demo`hidden text&gt;`B333
 
 Full control: `B444`&lt;!32|all_options`hidden text&gt;`B333
 `b
-&gt;&gt;&gt; Checkboxes
+
+>>> Checkboxes
 
 In addition to text fields, Checkboxes are another way of submitting data. They allow the user to make a single selection or select multiple options.
 
@@ -429,7 +523,7 @@ You can also pre-check both checkboxes and radio groups by appending a |* after 
 
 `B444`&lt;?|checkbox|1|*`&gt;`b Pre-checked checkbox`
 
-&gt;&gt;&gt; Radio groups
+>>> Radio groups
 
 Radio groups are another input that lets the user chose from a set of options. Unlike checkboxes, radio buttons with the same field name are mutually exclusive.
 
@@ -477,6 +571,36 @@ This line will
 
 ``
 
+
+>Partials
+
+You can include partials in pages, which will load asynchronously once the page itself has loaded.
+
+`Faaa
+`=
+`{f64a846313b874ee4a357040807f8c77:/page/partial_1.mu}
+`=
+``
+
+It's also possible to set an auto-refresh interval for partials. Omit or set to 0 to disable. The following partial will update every 10 seconds.
+
+`Faaa
+`=
+`{f64a846313b874ee4a357040807f8c77:/page/refreshing_partial.mu`10}
+`=
+``
+
+You can include field values and variables in partial updates, and by setting the `!pid`! variable, you can create links that update one or more specific partials.
+
+`Faaa
+`=
+Name: `B444`&lt;user_name`&gt;`b
+
+`F38a`[Say hello`p:32]`f
+
+`{f64a846313b874e84a357039807f8c77:/page/hello_partial.mu`0`pid=32|user_name}
+`=
+``
 
 >Literals
 
