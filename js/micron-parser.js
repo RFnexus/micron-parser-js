@@ -17,6 +17,9 @@ class MicronParser {
         this.DEFAULT_FG_LIGHT = "222";
         this.DEFAULT_BG = "default";
         this.MAX_TABLE_WIDTH = 100;
+        this.DEFAULT_FOLD_GLYPHS = ["▾", "▸"];
+
+        this.injectFoldStyles();
 
         if (this.enableForceMonospace) {
             this.injectMonospaceStyles();
@@ -70,6 +73,33 @@ class MicronParser {
             .Mu-mws {
                 text-decoration: inherit;
                 display: inline-block;
+            }
+        `;
+        document.head.appendChild(styleEl);
+    }
+
+    injectFoldStyles() {
+        if (typeof document === "undefined" || document.getElementById('micron-fold-styles')) {
+            return;
+        }
+
+        const styleEl = document.createElement('style');
+        styleEl.id = 'micron-fold-styles';
+
+        styleEl.textContent = `
+            details.micron-fold > summary {
+                list-style: none;
+                display: block;
+                cursor: pointer;
+            }
+            details.micron-fold > summary::-webkit-details-marker {
+                display: none;
+            }
+            details.micron-fold > summary .micron-fold-glyph::before {
+                content: attr(data-closed) " ";
+            }
+            details.micron-fold[open] > summary .micron-fold-glyph::before {
+                content: attr(data-open) " ";
             }
         `;
         document.head.appendChild(styleEl);
@@ -196,15 +226,7 @@ class MicronParser {
 
         for (let line of lines) {
             const lineOutput = this.parseLine(line, state);
-            if (lineOutput && lineOutput.length > 0) {
-                for (let el of lineOutput) {
-                    tempContainer.appendChild(el);
-                }
-            } else if (lineOutput && lineOutput.length === 0) {
-                // skip
-            } else {
-                tempContainer.appendChild(document.createElement("br"));
-            }
+            this.appendLineOutput(tempContainer, lineOutput, state);
         }
 
         MicronParser._resolveEmptyAnchors(tempContainer);
@@ -266,16 +288,7 @@ class MicronParser {
         for (let line of lines) {
             line = DOMPurify.sanitize(line, { USE_PROFILES: { html: true } });
             const lineOutput = this.parseLine(line, state);
-            if (lineOutput && lineOutput.length > 0) {
-                for (let el of lineOutput) {
-
-                    container.appendChild(el);
-                }
-            } else if (lineOutput && lineOutput.length === 0) {
-                // skip
-            } else {
-                container.appendChild(document.createElement("br"));
-            }
+            this.appendLineOutput(container, lineOutput, state);
         }
 
         MicronParser._resolveEmptyAnchors(container);
@@ -284,7 +297,39 @@ class MicronParser {
         return fragment;
     }
 
+    appendLineOutput(root, lineOutput, state) {
+        if (!state._foldStack) {
+            state._foldStack = [];
+        }
+        const stack = state._foldStack;
+        if (state._line_is_heading) {
+            const level = state._line_heading_level;
+            while (stack.length > 0 && stack[stack.length - 1].depth >= level) {
+                stack.pop();
+            }
+        } else {
+            const level = state.depth;
+            while (stack.length > 0 && stack[stack.length - 1].depth > level) {
+                stack.pop();
+            }
+        }
+        const target = stack.length > 0 ? stack[stack.length - 1].content : root;
+        if (lineOutput && lineOutput.length > 0) {
+            for (let el of lineOutput) {
+                target.appendChild(el);
+            }
+        } else if (!lineOutput) {
+            target.appendChild(document.createElement("br"));
+        }
+        if (state._collapsible_pending) {
+            stack.push(state._collapsible_pending);
+            state._collapsible_pending = null;
+        }
+    }
+
     parseLine(line, state) {
+        state._line_is_heading = false;
+        state._collapsible_pending = null;
         if (line.length > 0) {
             if (line === "`=") {
                 state.literal = !state.literal;
@@ -327,6 +372,14 @@ class MicronParser {
             let preEscape = false;
 
             if (!state.literal) {
+                let collapsibleHeading = false;
+                let collapsedInitial = false;
+                if ((line.startsWith("`+") || line.startsWith("`-")) && line[2] === ">") {
+                    collapsibleHeading = true;
+                    collapsedInitial = line[1] === "-";
+                    line = line.slice(2);
+                }
+
                 if (line[0] === ">" && line.includes("`<")) {
                     line = line.replace(/^>+/, "");
                 }
@@ -335,6 +388,14 @@ class MicronParser {
                     line = line.slice(1);
                     preEscape = true;
                 } else if (line[0] === "#") {
+                    const fold_parts = line.split(/\s+/);
+                    if (fold_parts[0] === "#!fold") {
+                        if (fold_parts.length >= 3) {
+                            state.fold_glyphs = [fold_parts[1], fold_parts[2]];
+                        } else if (fold_parts.length === 2) {
+                            state.fold_glyphs = [fold_parts[1], fold_parts[1]];
+                        }
+                    }
                     return [];
                 } else if (line.startsWith("`{")) {
                     return this.parsePartial(line.slice(2)) || [];
@@ -348,6 +409,8 @@ class MicronParser {
                         i++;
                     }
                     state.depth = i;
+                    state._line_is_heading = true;
+                    state._line_heading_level = i;
                     let headingLine = line.slice(i);
 
                     if (headingLine.length > 0) {
@@ -371,14 +434,40 @@ class MicronParser {
                         }
 
                         if (outputParts && outputParts.length > 0) {
+                            const innerDiv = document.createElement("div");
+                            this.applySectionIndent(innerDiv, state);
+                            this.applyAlignment(innerDiv, state);
+
+                            if (collapsibleHeading) {
+                                const glyphs = state.fold_glyphs || this.DEFAULT_FOLD_GLYPHS;
+                                const glyphSpan = document.createElement("span");
+                                glyphSpan.className = "micron-fold-glyph";
+                                glyphSpan.setAttribute("data-open", glyphs[0]);
+                                glyphSpan.setAttribute("data-closed", glyphs[1]);
+                                innerDiv.appendChild(glyphSpan);
+                                this.appendOutput(innerDiv, outputParts, state);
+
+                                const summary = document.createElement("summary");
+                                this.applyStyleToElement(summary, style);
+                                summary.style.width = "100%";
+                                summary.appendChild(innerDiv);
+
+                                const details = document.createElement("details");
+                                details.className = "micron-fold";
+                                details.style.width = "100%";
+                                if (!collapsedInitial) {
+                                    details.setAttribute("open", "");
+                                }
+                                details.appendChild(summary);
+
+                                state._collapsible_pending = { depth: i, content: details };
+                                return [details];
+                            }
+
                             const outerDiv = document.createElement("div");
                             this.applyStyleToElement(outerDiv, style);
                             outerDiv.style.display = "block";
                             outerDiv.style.width = "100%";
-
-                            const innerDiv = document.createElement("div");
-                            this.applySectionIndent(innerDiv, state);
-                            this.applyAlignment(innerDiv, state);
 
                             this.appendOutput(innerDiv, outputParts, state);
                             outerDiv.appendChild(innerDiv);
@@ -541,15 +630,27 @@ class MicronParser {
                     a.setAttribute("aria-hidden", "true");
                     container.appendChild(a);
                 } else if (p.type === "field") {
-                    let input = document.createElement("input");
-                    input.type = p.masked ? "password" : "text";
-                    input.name = p.name;
-                    input.setAttribute('value', p.data);
-                    if (p.width) {
-                        input.size = p.width;
+                    if (p.rows && p.rows > 1) {
+                        let textarea = document.createElement("textarea");
+                        textarea.name = p.name;
+                        textarea.rows = p.rows;
+                        if (p.width) {
+                            textarea.cols = p.width;
+                        }
+                        textarea.textContent = p.data;
+                        this.applyStyleToElement(textarea, this.styleFromState(p.style), state.default_bg);
+                        container.appendChild(textarea);
+                    } else {
+                        let input = document.createElement("input");
+                        input.type = p.masked ? "password" : "text";
+                        input.name = p.name;
+                        input.setAttribute('value', p.data);
+                        if (p.width) {
+                            input.size = p.width;
+                        }
+                        this.applyStyleToElement(input, this.styleFromState(p.style), state.default_bg);
+                        container.appendChild(input);
                     }
-                    this.applyStyleToElement(input, this.styleFromState(p.style), state.default_bg);
-                    container.appendChild(input);
                 } else if (p.type === "checkbox") {
                     let label = document.createElement("label");
                     let cb = document.createElement("input");
@@ -921,6 +1022,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
         let field_content = line.substring(field_start, backtick_pos);
         let field_masked = false;
         let field_width = 24;
+        let field_rows = 1;
         let field_type = "field";
         let field_name = field_content;
         let field_value = "";
@@ -943,9 +1045,22 @@ applyStyleToElement(el, style, defaultBg = "default") {
             }
 
             if (field_flags.length > 0) {
-                let w = parseInt(field_flags, 10);
+                let width_flag = field_flags;
+                let rows_flag = "";
+                const x_pos = field_flags.indexOf('x');
+                if (x_pos !== -1) {
+                    width_flag = field_flags.slice(0, x_pos);
+                    rows_flag = field_flags.slice(x_pos + 1);
+                }
+                let w = parseInt(width_flag, 10);
                 if (!isNaN(w)) {
                     field_width = Math.min(w, 256);
+                }
+                if (rows_flag.length > 0) {
+                    let r = parseInt(rows_flag, 10);
+                    if (!isNaN(r)) {
+                        field_rows = Math.max(1, Math.min(r, 256));
+                    }
                 }
             }
 
@@ -981,6 +1096,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
                 type: "field",
                 name: field_name,
                 width: field_width,
+                rows: field_rows,
                 masked: field_masked,
                 data: field_data,
                 style: style
