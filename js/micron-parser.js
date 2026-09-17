@@ -10,9 +10,11 @@
  
 class MicronParser {
 
-    constructor(darkTheme = true, enableForceMonospace = true) {
+    constructor(darkTheme = true, enableForceMonospace = true, options = {}) {
         this.darkTheme = darkTheme;
         this.enableForceMonospace = enableForceMonospace;
+        this.accessibility = options.accessibility === true;
+        this.serif = options.serif === true;
         this.DEFAULT_FG_DARK = "ddd";
         this.DEFAULT_FG_LIGHT = "222";
         this.DEFAULT_BG = "default";
@@ -23,6 +25,14 @@ class MicronParser {
 
         if (this.enableForceMonospace) {
             this.injectMonospaceStyles();
+        }
+
+        if (this.accessibility) {
+            this.injectAccessibilityStyles();
+        }
+
+        if (this.serif) {
+            this.injectSerifStyles();
         }
 
         try {
@@ -105,6 +115,49 @@ class MicronParser {
         document.head.appendChild(styleEl);
     }
 
+    injectAccessibilityStyles() {
+        if (typeof document === "undefined" || document.getElementById('micron-accessibility-styles')) {
+            return;
+        }
+
+        const styleEl = document.createElement('style');
+        styleEl.id = 'micron-accessibility-styles';
+
+        styleEl.textContent = `
+            .Mu-sr {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                white-space: nowrap;
+                border: 0;
+            }
+        `;
+        document.head.appendChild(styleEl);
+    }
+
+    injectSerifStyles() {
+        if (typeof document === "undefined" || document.getElementById('micron-serif-styles')) {
+            return;
+        }
+
+        const styleEl = document.createElement('style');
+        styleEl.id = 'micron-serif-styles';
+
+        styleEl.textContent = `
+            .Mu-serif {
+                font-family: var(--mu-serif-font, serif);
+            }
+            .Mu-serif .Mu-literal {
+                font-family: var(--mu-mono-font, monospace);
+            }
+        `;
+        document.head.appendChild(styleEl);
+    }
+
     static formatNomadnetworkUrl(url) {
         if (typeof url === "string" && url.startsWith("#")) {
             return url;
@@ -116,6 +169,28 @@ class MicronParser {
     }
 
     static _MICRON_STRIP_RE = /`[FB]T[0-9a-fA-F]{6}|`[FB][0-9a-fA-F]{3}|`:[A-Za-z0-9_\-]*|`[!*_=fbacrl`<>{]/g;
+
+    static _sanitizer = null;
+
+    static _UA_COLORED_TAGS = new Set(["A", "INPUT", "TEXTAREA", "SELECT", "BUTTON"]);
+
+    getSanitizer() {
+        if (MicronParser._sanitizer) {
+            return MicronParser._sanitizer;
+        }
+        const sanitizer = DOMPurify(typeof window !== "undefined" ? window : undefined);
+        sanitizer.addHook("uponSanitizeAttribute", (node, hookEvent) => {
+            const tagName = node.nodeName;
+            if (hookEvent.attrName === "name" && (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT")) {
+                hookEvent.forceKeepAttr = true;
+            }
+            if (hookEvent.attrName === "id" && tagName === "A" && node.classList.contains("micron-anchor")) {
+                hookEvent.forceKeepAttr = true;
+            }
+        });
+        MicronParser._sanitizer = sanitizer;
+        return sanitizer;
+    }
 
     static slugifyMicron(text) {
         if (text == null) return "";
@@ -184,6 +259,7 @@ class MicronParser {
 
     convertMicronToHtml(markup) {
         let html = "";
+        markup = markup.replace(/\r\n?/g, "\n");
 
         // parse header tags for page-level color defaults
         const headerColors = this.parseHeaderTags(markup);
@@ -223,6 +299,10 @@ class MicronParser {
         if (defaultBg && defaultBg !== "default") {
             tempContainer.style.backgroundColor = this.colorToCss(defaultBg);
         }
+        tempContainer.style.textAlign = "left";
+        if (this.serif) {
+            tempContainer.className = "Mu-serif";
+        }
 
         for (let line of lines) {
             const lineOutput = this.parseLine(line, state);
@@ -231,11 +311,10 @@ class MicronParser {
 
         MicronParser._resolveEmptyAnchors(tempContainer);
 
-        const hasContainerStyle = (defaultFg && defaultFg !== "default") || (defaultBg && defaultBg !== "default");
-        html = hasContainerStyle ? tempContainer.outerHTML : tempContainer.innerHTML;
+        html = tempContainer.outerHTML;
 
        try {
-        return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+        return this.getSanitizer().sanitize(html, { USE_PROFILES: { html: true } });
        } catch (error) {
             console.warn('DOMPurify is not installed. Include it above micron-parser.js or run npm install dompurify ', error);
             return `<p style="color: red;"> ⚠ DOMPurify is not installed. Include it above micron-parser.js or run npm install dompurify </p>`;
@@ -245,6 +324,7 @@ class MicronParser {
     convertMicronToFragment(markup) {
         // Create a fragment to hold all the Micron output
         const fragment = document.createDocumentFragment();
+        markup = markup.replace(/\r\n?/g, "\n");
 
         const headerColors = this.parseHeaderTags(markup);
 
@@ -282,11 +362,15 @@ class MicronParser {
         if (defaultBg && defaultBg !== "default") {
             container.style.backgroundColor = this.colorToCss(defaultBg);
         }
+        container.style.textAlign = "left";
+        if (this.serif) {
+            container.className = "Mu-serif";
+        }
 
         const lines = markup.split("\n");
 
         for (let line of lines) {
-            line = DOMPurify.sanitize(line, { USE_PROFILES: { html: true } });
+            line = this.getSanitizer().sanitize(line, { USE_PROFILES: { html: true } });
             const lineOutput = this.parseLine(line, state);
             this.appendLineOutput(container, lineOutput, state);
         }
@@ -401,8 +485,12 @@ class MicronParser {
                     return this.parsePartial(line.slice(2)) || [];
                 } else if (line[0] === "<") {
                     state.depth = 0;
-                    if (line.length === 1) return [];
-                    return this.parseLine(line.slice(1), state);
+                    let resetCount = 0;
+                    while (resetCount < line.length && line[resetCount] === "<") {
+                        resetCount++;
+                    }
+                    if (resetCount === line.length) return [];
+                    return this.parseLine(line.slice(resetCount), state);
                 } else if (line[0] === ">") {
                     let i = 0;
                     while (i < line.length && line[i] === ">") {
@@ -437,6 +525,10 @@ class MicronParser {
                             const innerDiv = document.createElement("div");
                             this.applySectionIndent(innerDiv, state);
                             this.applyAlignment(innerDiv, state);
+                            if (this.accessibility) {
+                                innerDiv.setAttribute("role", "heading");
+                                innerDiv.setAttribute("aria-level", String(i));
+                            }
 
                             if (collapsibleHeading) {
                                 const glyphs = state.fold_glyphs || this.DEFAULT_FOLD_GLYPHS;
@@ -444,11 +536,14 @@ class MicronParser {
                                 glyphSpan.className = "micron-fold-glyph";
                                 glyphSpan.setAttribute("data-open", glyphs[0]);
                                 glyphSpan.setAttribute("data-closed", glyphs[1]);
+                                if (this.accessibility) {
+                                    glyphSpan.setAttribute("aria-hidden", "true");
+                                }
                                 innerDiv.appendChild(glyphSpan);
-                                this.appendOutput(innerDiv, outputParts, state);
+                                this.appendOutput(innerDiv, outputParts, state, style.fg);
 
                                 const summary = document.createElement("summary");
-                                this.applyStyleToElement(summary, style);
+                                this.applyStyleToElement(summary, style, "default", state.default_fg);
                                 summary.style.width = "100%";
                                 summary.appendChild(innerDiv);
 
@@ -465,11 +560,11 @@ class MicronParser {
                             }
 
                             const outerDiv = document.createElement("div");
-                            this.applyStyleToElement(outerDiv, style);
+                            this.applyStyleToElement(outerDiv, style, "default", state.default_fg);
                             outerDiv.style.display = "block";
                             outerDiv.style.width = "100%";
 
-                            this.appendOutput(innerDiv, outputParts, state);
+                            this.appendOutput(innerDiv, outputParts, state, style.fg);
                             outerDiv.appendChild(innerDiv);
 
                             return [outerDiv];
@@ -498,6 +593,9 @@ class MicronParser {
 
                     const div = document.createElement("div");
                     div.textContent = repeated;
+                    if (this.accessibility) {
+                        div.setAttribute("role", "separator");
+                    }
                     div.style.width = "100%";
                     div.style.whiteSpace = "nowrap";
                     div.style.overflow = "hidden";
@@ -517,6 +615,9 @@ class MicronParser {
             }
 
             let container = document.createElement("div");
+            if (this.serif && state.literal) {
+                container.className = "Mu-literal";
+            }
             this.applyAlignment(container, state);
             this.applySectionIndent(container, state);
 
@@ -554,7 +655,9 @@ class MicronParser {
 
     applyAlignment(el, state) {
         // use CSS text-align for alignment
-        el.style.textAlign = state.align || "left";
+        if (state.align && state.align !== "left") {
+            el.style.textAlign = state.align;
+        }
     }
 
     applySectionIndent(el, state) {
@@ -585,19 +688,24 @@ class MicronParser {
         if (style.italic !== undefined && style.italic !== null) state.formatting.italic = style.italic;
     }
 
-    appendOutput(container, parts, state) {
+    appendOutput(container, parts, state, inheritedFg = state.default_fg) {
 
         let currentSpan = null;
         let currentStyle = null;
+        let currentHtml = "";
+        let currentText = "";
 
          const flushSpan = () => {
             if (currentSpan) {
                 if (currentStyle && currentStyle.bg !== state.default_bg && currentStyle.bg !== "default") {
                     currentSpan.style.display = "inline-block";
                 }
+                this.setReadableContent(currentSpan, currentHtml, currentText);
                 container.appendChild(currentSpan);
                 currentSpan = null;
                 currentStyle = null;
+                currentHtml = "";
+                currentText = "";
             }
         };
 
@@ -613,10 +721,11 @@ class MicronParser {
                 if (!this.stylesEqual(styleSpec, currentStyle)) {
                     flushSpan();
                     currentSpan = document.createElement("span");
-                    this.applyStyleToElement(currentSpan, styleSpec, state.default_bg);
+                    this.applyStyleToElement(currentSpan, styleSpec, state.default_bg, inheritedFg);
                     currentStyle = styleSpec;
                 }
-                currentSpan.innerHTML += text;
+                currentHtml += this.renderText(text, state);
+                currentText += text;
             } else if (p && typeof p === 'object') {
                 // field, checkbox, radio, link, anchor
                 flushSpan();
@@ -638,17 +747,23 @@ class MicronParser {
                             textarea.cols = p.width;
                         }
                         textarea.textContent = p.data;
-                        this.applyStyleToElement(textarea, this.styleFromState(p.style), state.default_bg);
+                        if (this.accessibility) {
+                            textarea.setAttribute("aria-label", p.name);
+                        }
+                        this.applyStyleToElement(textarea, this.styleFromState(p.style), state.default_bg, inheritedFg);
                         container.appendChild(textarea);
                     } else {
                         let input = document.createElement("input");
                         input.type = p.masked ? "password" : "text";
                         input.name = p.name;
                         input.setAttribute('value', p.data);
+                        if (this.accessibility) {
+                            input.setAttribute("aria-label", p.name);
+                        }
                         if (p.width) {
                             input.size = p.width;
                         }
-                        this.applyStyleToElement(input, this.styleFromState(p.style), state.default_bg);
+                        this.applyStyleToElement(input, this.styleFromState(p.style), state.default_bg, inheritedFg);
                         container.appendChild(input);
                     }
                 } else if (p.type === "checkbox") {
@@ -660,7 +775,7 @@ class MicronParser {
                     if (p.prechecked) cb.setAttribute('checked', true);
                     label.appendChild(cb);
                     label.appendChild(document.createTextNode(" " + p.label));
-                    this.applyStyleToElement(label, this.styleFromState(p.style), state.default_bg);
+                    this.applyStyleToElement(label, this.styleFromState(p.style), state.default_bg, inheritedFg);
                     container.appendChild(label);
                 } else if (p.type === "radio") {
                     let label = document.createElement("label");
@@ -671,7 +786,7 @@ class MicronParser {
                     if (p.prechecked) rb.setAttribute('checked', true);
                     label.appendChild(rb);
                     label.appendChild(document.createTextNode(" " + p.label));
-                    this.applyStyleToElement(label, this.styleFromState(p.style), state.default_bg);
+                    this.applyStyleToElement(label, this.styleFromState(p.style), state.default_bg, inheritedFg);
                     container.appendChild(label);
                 } else if (p.type === "link") {
 
@@ -694,8 +809,8 @@ class MicronParser {
                                 foundAll = true;
                             } else if (f.includes('=')) {
                                 // this is a request variable (key=value)
-                                const [k, v] = f.split('=');
-                                requestVars[k] = v;
+                                const separatorIndex = f.indexOf('=');
+                                requestVars[f.slice(0, separatorIndex)] = f.slice(separatorIndex + 1);
                             } else {
                                 // this is a field name to submit
                                 fieldsToSubmit.push(f);
@@ -726,8 +841,8 @@ class MicronParser {
                     }
                     a.classList.add('Mu-nl');
                     a.setAttribute('data-action', "openNode");
-                    a.innerHTML = p.label;
-                    this.applyStyleToElement(a, this.styleFromState(p.style), state.default_bg);
+                    this.setReadableContent(a, this.renderText(p.label, state), p.label);
+                    this.applyStyleToElement(a, this.styleFromState(p.style), state.default_bg, inheritedFg);
                     container.appendChild(a);
                 }
 
@@ -743,19 +858,42 @@ class MicronParser {
         return (s1.fg === s2.fg && s1.bg === s2.bg && s1.bold === s2.bold && s1.underline === s2.underline && s1.italic === s2.italic);
     }
 
+    renderText(text, state) {
+        if (this.enableForceMonospace && (!this.serif || state.literal)) {
+            return this.splitAtSpaces(text);
+        }
+        return text;
+    }
+
+    setReadableContent(el, html, text) {
+        if (this.accessibility && html !== text) {
+            const visual = document.createElement("span");
+            visual.setAttribute("aria-hidden", "true");
+            visual.innerHTML = html;
+            const readable = document.createElement("span");
+            readable.className = "Mu-sr";
+            readable.textContent = text;
+            el.appendChild(visual);
+            el.appendChild(readable);
+            return;
+        }
+        el.innerHTML = html;
+    }
+
     styleFromState(stateStyle) {
         // stateStyle is a name of a style or a style object
         // in this code, p.style is actually a style name. j,ust return that
         return stateStyle;
     }
 
-applyStyleToElement(el, style, defaultBg = "default") {
+applyStyleToElement(el, style, defaultBg = "default", inheritedFg = null) {
         if (!style) return;
         // convert style fg/bg to colors
         let fgColor = this.colorToCss(style.fg);
         let bgColor = this.colorToCss(style.bg);
+        const keepsOwnColor = MicronParser._UA_COLORED_TAGS.has(el.tagName);
 
-        if (fgColor && fgColor !== "default") {
+        if (fgColor && fgColor !== "default" && (keepsOwnColor || style.fg !== inheritedFg)) {
             el.style.color = fgColor;
         }
         if (bgColor && bgColor !== "default" && style.bg !== defaultBg) {
@@ -803,11 +941,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
             if (line === "\\`=") {
                 line = "`=";
             }
-            if(this.enableForceMonospace) {
-                return [[this.stateToStyle(state), this.splitAtSpaces(line)]];
-            } else {
-                return [[this.stateToStyle(state), line]];
-            }
+            return [[this.stateToStyle(state), line]];
         }
 
         let output = [];
@@ -818,11 +952,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
 
         const flushPart = () => {
             if (part.length > 0) {
-                if(this.enableForceMonospace) {
-                    output.push([this.stateToStyle(state), this.splitAtSpaces(part)]);
-                } else {
-                    output.push([this.stateToStyle(state), part]);
-                }
+                output.push([this.stateToStyle(state), part]);
                 part = "";
             }
         };
@@ -936,16 +1066,20 @@ applyStyleToElement(el, style, defaultBg = "default") {
                         }
                         break;
 
-                    case '[':
+                    case '[': {
                         // flush current text first
                         flushPart();
-                        let linkData = this.parseLink(line, i, state);
+                        const linkEnd = line.indexOf(']', i);
+                        if (linkEnd === -1) {
+                            break;
+                        }
+                        const linkData = this.parseLink(line, i, state);
                         if (linkData) {
                             output.push(linkData.obj);
-                            i += linkData.skip;
-                            continue;
                         }
-                        break;
+                        i = linkEnd;
+                        continue;
+                    }
 
                     case ':': {
                         let nameStart = i + 1;
@@ -1004,11 +1138,7 @@ applyStyleToElement(el, style, defaultBg = "default") {
         }
         // end of line
         if (part.length > 0) {
-            if(this.enableForceMonospace) {
-                output.push([this.stateToStyle(state), this.splitAtSpaces(part)]);
-            } else {
-                output.push([this.stateToStyle(state), part]);
-            }
+            output.push([this.stateToStyle(state), part]);
         }
 
         return output;
@@ -1140,11 +1270,6 @@ applyStyleToElement(el, style, defaultBg = "default") {
         // format the URL
         link_url = MicronParser.formatNomadnetworkUrl(link_url);
 
-        // Apply forceMonospace
-        if(this.enableForceMonospace) {
-            link_label = this.splitAtSpaces(link_label);
-        }
-
         let style = this.stateToStyle(state);
         let obj = {
             type: "link",
@@ -1198,6 +1323,11 @@ applyStyleToElement(el, style, defaultBg = "default") {
         const el = document.createElement("div");
         el.className = "Mu-partial";
         el.textContent = "⧖";
+        if (this.accessibility) {
+            el.setAttribute("role", "status");
+            el.setAttribute("aria-live", "polite");
+            el.setAttribute("aria-busy", "true");
+        }
         el.setAttribute("data-partial-url", formattedUrl);
         el.setAttribute("data-partial-destination", partial_url);
         el.setAttribute("data-partial-descriptor", data);
@@ -1486,6 +1616,9 @@ applyStyleToElement(el, style, defaultBg = "default") {
             if (previous) previous.abort();
             const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
             if (controller) controllers.set(el, controller);
+            if (el.getAttribute("role") === "status") {
+                el.setAttribute("aria-busy", "true");
+            }
             el.dispatchEvent(new CustomEvent("partial-loading", { bubbles: true, detail: info }));
             try {
                 const result = await fetcher({ ...info, signal: controller ? controller.signal : null });
@@ -1495,6 +1628,9 @@ applyStyleToElement(el, style, defaultBg = "default") {
                 el.dispatchEvent(new CustomEvent("partial-error", { bubbles: true, detail: { error: e, info } }));
             } finally {
                 if (controllers.get(el) === controller) controllers.delete(el);
+                if (!controllers.has(el) && el.getAttribute("role") === "status") {
+                    el.setAttribute("aria-busy", "false");
+                }
             }
         };
 
@@ -1554,6 +1690,9 @@ applyStyleToElement(el, style, defaultBg = "default") {
         const headerRow = document.createElement("tr");
         for (let i = 0; i < headerCells.length; i++) {
             const th = document.createElement("th");
+            if (this.accessibility) {
+                th.setAttribute("scope", "col");
+            }
             th.style.border = cellBorder;
             th.style.padding = cellPadding;
             th.style.textAlign = alignments[i] || 'left';
