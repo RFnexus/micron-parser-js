@@ -56,6 +56,38 @@ const cleanup = MicronParser.bindPartials(root, async ({ destination, fields, id
 cleanup();
 ```
 
+## Accessibility
+
+Pass `{ accessibility: true }` as the third option to add screen reader / aria labels to the output. 
+
+- Headings: `role="heading"` with `aria-level`, 
+- Text dividers: `role="separator"`, 
+- text inputs: `aria-label` from their Micron field name, 
+- table headers: `scope="col"`, 
+- partial placeholders: `role="status"`. `aria-live`,,  `aria-busy`, 
+- forceMonospace characters get aria-hidden in the upper div block to avoid reading page elements like ASCII art or non-text content 
+
+```js
+const parser = new MicronParser(true, true, { accessibility: true });
+```
+
+## Serif output
+
+Pass `{ serif: true }` to render text in a serif font. The included default is Noto Serif Nerd Font. Anything in a literal (`=) will still remain monospace, but text content will be rendered in a Serif font. 
+
+```css
+#output {
+    --mu-serif-font: 'Noto Serif Nerd Font', Georgia, serif;
+    --mu-mono-font: 'Roboto Mono Nerd Font', monospace;
+}
+```
+
+```js
+const parser = new MicronParser(true, true, { serif: true });
+```
+
+
+
 ## Best practices
 
 For optimal display of Micron content in the browser it's recommended to use a monospaced font with NerdFont icon support, such as the ones provided [here](https://www.nerdfonts.com/font-downloads).

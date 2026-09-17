@@ -15,6 +15,13 @@
             font-style: normal;
         }
 
+        @font-face {
+            font-family: 'Noto Serif Nerd Font';
+            src: url('/fonts/NotoSerifNerdFontPropo-Regular.ttf') format('truetype');
+            font-weight: 400;
+            font-style: normal;
+        }
+
         body {
             font-family: Roboto Mono Nerd Font, monospace, monospace !important;
             line-height: normal !important;
@@ -23,6 +30,11 @@
         pre {
             font-family: Roboto Mono Nerd Font, monospace, monospace !important;
             line-height: normal !important;
+        }
+
+        #output {
+            --mu-serif-font: 'Noto Serif Nerd Font', Georgia, serif;
+            --mu-mono-font: 'Roboto Mono Nerd Font', monospace;
         }
 
         #output input.Mu-armed {
@@ -55,6 +67,10 @@
 <body class="bg-black text-white h-screen  flex flex-col overflow-y-hidden">
     <div class="bg-zinc-900 border-b border-zinc-700 p-2 flex items-center">
         <div id="tabs" class="flex-1 flex space-x-2 overflow-x-auto"></div>
+        <select id="fontSelect" class="px-2 py-1 bg-zinc-800 text-white rounded border border-zinc-600 mr-2" aria-label="Output font">
+            <option value="mono">Roboto Mono Nerd Font</option>
+            <option value="serif">Noto Serif Nerd Font</option>
+        </select>
         <button id="hideEditor" class="px-3 py-1 bg-zinc-500 text-white rounded hover:bg-red-700">Hide Editor</button>
         <button id="saveFile" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 ml-2">Save to Disk</button>
         <button id="newFile" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 ml-2">New File</button>
@@ -130,6 +146,7 @@ With micron you can easily create structured documents and pages with formatting
  `F44f`_`[Links`#links]`_`f
  `F44f`_`[Anchors`#anchors]`_`f
  `F44f`_`[Tables`#tables]`_`f
+ `F44f`_`[Folding Sections`#folding-sections]`_`f
  `F44f`_`[Fields & Requests`#fields-requests]`_`f
  `F44f`_`[Comments`#comments]`_`f
  `F44f`_`[Partials`#partials]`_`f
@@ -416,6 +433,51 @@ You can include rendered tables by enclosing them in \`t tags. Optionally, you c
 | Orange | Ask, nicely | 3 |
 `t
 
+>Folding Sections
+
+Section headings can be made collapsible, so readers can fold away parts of a long page. Prefix a heading with \`+ to make it collapsible and open by default, or with \`- to make it collapsible and start collapsed. This works at any heading level. Everything that follows the heading belongs to the fold, up to the next heading of the same or a higher level, or a \`< section reset.
+
+`Faaa
+`=
+`+>>Frequently asked questions
+This section starts open. Activate the heading to fold it away.
+
+`->>Changelog
+This section starts collapsed. Activate the heading to expand it.
+
+`+>>>Nested folds
+Deeper headings fold independently inside their parent.
+`=
+``
+
+Here is the same markup rendered:
+
+`+>>Frequently asked questions
+This section starts open. Activate the heading to fold it away.
+
+`->>Changelog
+This section starts collapsed. Activate the heading to expand it.
+
+`+>>>Nested folds
+Deeper headings fold independently inside their parent.
+
+>>Fold glyphs
+
+The glyph shown before a foldable heading defaults to ▾ when open and ▸ when collapsed. Change them anywhere in a page with a comment line starting with `*#!fold`*, followed by the open glyph and the closed glyph. Giving a single glyph uses it for both states.
+
+`Faaa
+`=
+#!fold ▼ ▶
+`->>Custom glyphs
+Folded content.
+`=
+``
+
+#!fold ▼ ▶
+`->>Custom glyphs
+Folded content.
+#!fold ▾ ▸
+
 >Fields & Requests
 
 Nomad Network let's you use simple input fields for submitting data to node-side applications. Submitted data, along with other session variables will be available to the node-side script / program as environment variables.
@@ -673,7 +735,8 @@ To display literal content, for example source-code, or blocks of text that shou
         class Editor {
             constructor() {
                 this.fileManager = new FileManager();
-                this.parser = new MicronParser(true);
+                this.font = localStorage.getItem('micronFont') || 'mono';
+                this.parser = this.createParser();
 
                 this.isEditorVisible = true;
 
@@ -686,6 +749,7 @@ To display literal content, for example source-code, or blocks of text that shou
                 this.newFileBtn = document.getElementById('newFile');
                 this.saveFileBtn = document.getElementById('saveFile')
                 this.hideEditorBtn = document.getElementById('hideEditor');
+                this.fontSelect = document.getElementById('fontSelect');
 
                 this.multilineCleanup = null;
 
@@ -703,8 +767,25 @@ To display literal content, for example source-code, or blocks of text that shou
                 });
 
                 this.setupEventListeners();
+                this.applyFont();
                 this.renderTabs();
                 this.loadCurrentFile();
+            }
+
+            createParser() {
+                return new MicronParser(true, true, { accessibility: true, serif: this.font === 'serif' });
+            }
+
+            applyFont() {
+                this.fontSelect.value = this.font;
+            }
+
+            setFont(font) {
+                this.font = font;
+                localStorage.setItem('micronFont', font);
+                this.parser = this.createParser();
+                this.applyFont();
+                this.renderOutput(this.editor.value);
             }
 
             setupEventListeners() {
@@ -712,6 +793,7 @@ To display literal content, for example source-code, or blocks of text that shou
                 this.newFileBtn.addEventListener('click', () => this.createNewFile());
                 this.saveFileBtn.addEventListener('click', () => this.saveFile());
                 this.hideEditorBtn.addEventListener('click', () => this.toggleEditor());
+                this.fontSelect.addEventListener('change', () => this.setFont(this.fontSelect.value));
             }
 
             renderOutput(content) {
