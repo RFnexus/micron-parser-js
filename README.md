@@ -93,4 +93,3 @@ const parser = new MicronParser(true, true, { serif: true });
 For optimal display of Micron content in the browser it's recommended to use a monospaced font with NerdFont icon support, such as the ones provided [here](https://www.nerdfonts.com/font-downloads).
 
 
-
